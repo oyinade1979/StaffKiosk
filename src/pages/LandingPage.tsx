@@ -9,6 +9,8 @@ const PRICE_IDS = {
   yearly: "price_1To01bP9fDU1WUDl6qRAczWc",
 };
 
+const CONTACT_EMAIL = "oyincrown79@gmail.com";
+
 // ─── helpers ────────────────────────────────────────────────────────
 async function invokeFn(fnName: string, body: object): Promise<{ url?: string; error?: string }> {
   const { data: { session } } = await onspaceClient.auth.getSession();
@@ -30,6 +32,138 @@ async function invokeFn(fnName: string, body: object): Promise<{ url?: string; e
     return { error: msg };
   }
   return data as { url?: string };
+}
+
+// ─── Privacy Policy Modal ─────────────────────────────────────────────
+function PrivacyModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100 flex-shrink-0">
+          <h2 className="text-xl font-bold text-slate-900">Privacy Policy</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition text-xl leading-none">×</button>
+        </div>
+        <div className="overflow-y-auto px-7 py-6 text-sm text-slate-600 leading-relaxed space-y-5">
+          <p className="text-slate-400 text-xs">Last updated: {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">1. Information We Collect</h3>
+            <p>When you create an AccessGrid account, we collect your company name, work email address, and a password. We also collect staff names, departments, and email addresses that you add to the system for QR badge generation. Attendance records (check-in and check-out times) are stored and linked to staff members.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">2. How We Use Your Information</h3>
+            <p>Your information is used solely to provide the AccessGrid attendance tracking service. We use your email to send account verification codes and important service updates. Staff data is used only to generate QR codes and record attendance. We do not sell, share, or rent your data to third parties.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">3. Data Storage & Security</h3>
+            <p>Your account credentials are secured using industry-standard encryption via our authentication provider. Attendance and staff data is stored in a secure cloud database. Local device data (cached for offline use) is stored in your browser's localStorage and is not transmitted to third parties.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">4. Payment Information</h3>
+            <p>Payments are processed securely by Stripe. AccessGrid does not store or handle your card details directly. Stripe's privacy policy applies to all payment transactions. You can manage or cancel your subscription at any time through the Stripe customer portal accessible in your admin settings.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">5. Cookies</h3>
+            <p>AccessGrid uses essential session cookies to keep you signed in. We do not use tracking, advertising, or analytics cookies. No third-party cookies are set on our platform.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">6. Data Retention</h3>
+            <p>Your data is retained for as long as your account is active. If you cancel your subscription, your data remains accessible for 30 days, after which it may be permanently deleted. You can request deletion of your account and all associated data at any time by contacting us.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">7. Your Rights</h3>
+            <p>You have the right to access, correct, or delete the personal data we hold about you. To exercise these rights or ask any privacy-related questions, please contact us at{" "}
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-cyan-600 hover:underline">{CONTACT_EMAIL}</a>.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">8. Changes to This Policy</h3>
+            <p>We may update this Privacy Policy from time to time. We will notify registered users of significant changes by email. Continued use of AccessGrid after changes constitutes acceptance of the updated policy.</p>
+          </div>
+        </div>
+        <div className="px-7 py-4 border-t border-slate-100 flex-shrink-0">
+          <button onClick={onClose} className="bg-slate-900 hover:bg-slate-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Terms of Service Modal ──────────────────────────────────────────
+function TermsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100 flex-shrink-0">
+          <h2 className="text-xl font-bold text-slate-900">Terms of Service</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition text-xl leading-none">×</button>
+        </div>
+        <div className="overflow-y-auto px-7 py-6 text-sm text-slate-600 leading-relaxed space-y-5">
+          <p className="text-slate-400 text-xs">Last updated: {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">1. Acceptance of Terms</h3>
+            <p>By creating an account and using AccessGrid, you agree to be bound by these Terms of Service. If you do not agree, please do not use the service. These terms apply to all users, including company administrators and their staff members.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">2. Service Description</h3>
+            <p>AccessGrid is a web-based staff attendance tracking system that allows companies to manage employee check-in and check-out using QR codes. The service includes a kiosk interface, admin dashboard, staff management, attendance reporting, and data export capabilities.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">3. Account Responsibilities</h3>
+            <p>You are responsible for maintaining the confidentiality of your account credentials. You must not share your login details or allow unauthorised access to your admin account. You agree to use AccessGrid only for lawful purposes and in accordance with applicable employment and data protection laws in your jurisdiction.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">4. Subscription & Billing</h3>
+            <p>AccessGrid is offered on a subscription basis — monthly (£25/month) or yearly (£240/year) per company. A 14-day free trial is included with each new account, after which payment is required to continue. Subscriptions automatically renew unless cancelled before the renewal date. You can cancel anytime via the Stripe customer portal in your admin settings.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">5. Refunds</h3>
+            <p>Refunds are considered on a case-by-case basis within 7 days of a charge if the service was not usable due to a fault on our end. To request a refund, contact us at{" "}
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-cyan-600 hover:underline">{CONTACT_EMAIL}</a>.
+              Trial periods are non-refundable once converted to a paid plan.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">6. Staff Data & GDPR</h3>
+            <p>As a company administrator, you act as the data controller for your staff members' personal information entered into AccessGrid. You are responsible for ensuring you have appropriate lawful basis (e.g. legitimate interest or employment contract) to collect and process attendance data, and for informing your staff accordingly.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">7. Service Availability</h3>
+            <p>We aim to keep AccessGrid available at all times but do not guarantee uninterrupted access. We are not liable for any downtime, data loss, or disruption caused by factors outside our reasonable control, including third-party service outages (e.g. Stripe, Supabase).</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">8. Termination</h3>
+            <p>We reserve the right to suspend or terminate accounts that violate these terms, engage in abuse, or remain unpaid. Upon termination, access to your data will cease after a 30-day grace period, after which it may be permanently deleted.</p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1.5">9. Contact</h3>
+            <p>For questions, complaints, or suggestions, please reach out at{" "}
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-cyan-600 hover:underline">{CONTACT_EMAIL}</a>.
+            </p>
+          </div>
+        </div>
+        <div className="px-7 py-4 border-t border-slate-100 flex-shrink-0">
+          <button onClick={onClose} className="bg-slate-900 hover:bg-slate-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition">Close</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Login Modal ─────────────────────────────────────────────────────
@@ -167,10 +301,12 @@ type Step = "form" | "verifyOtp" | "redirecting";
 interface CreateAccountModalProps {
   onClose: () => void;
   onEnterApp: () => void;
+  onShowPrivacy: () => void;
+  onShowTerms: () => void;
   initialPlan?: "monthly" | "yearly";
 }
 
-function CreateAccountModal({ onClose, onEnterApp, initialPlan = "monthly" }: CreateAccountModalProps) {
+function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, initialPlan = "monthly" }: CreateAccountModalProps) {
   const [plan, setPlan] = useState<"monthly" | "yearly">(initialPlan);
   const [form, setForm] = useState({ company: "", email: "", password: "" });
   const [otp, setOtp] = useState("");
@@ -422,8 +558,9 @@ function CreateAccountModal({ onClose, onEnterApp, initialPlan = "monthly" }: Cr
 
             <p className="text-center text-xs text-slate-400 mt-4">
               By signing up you agree to our{" "}
-              <a href="#" className="underline hover:text-slate-600">Terms</a> and{" "}
-              <a href="#" className="underline hover:text-slate-600">Privacy Policy</a>.
+              <button type="button" onClick={() => { onClose(); onShowTerms(); }} className="underline hover:text-slate-600">Terms</button>
+              {" "}and{" "}
+              <button type="button" onClick={() => { onClose(); onShowPrivacy(); }} className="underline hover:text-slate-600">Privacy Policy</button>.
             </p>
           </>
         )}
@@ -436,6 +573,8 @@ function CreateAccountModal({ onClose, onEnterApp, initialPlan = "monthly" }: Cr
 export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp: () => void; skipAutoLogin?: boolean }) {
   const [showModal, setShowModal] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [initialPlan, setInitialPlan] = useState<"monthly" | "yearly">("monthly");
   const [loggedInUser, setLoggedInUser] = useState<{ email: string; name: string } | null>(null);
 
@@ -676,7 +815,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
               { title: "Export in seconds", desc: "Need payroll data? Download a CSV of the full attendance log filtered by date, department, or person.", emoji: "📊" },
               { title: "Syncs across devices", desc: "Run multiple kiosks at different entrances. All data flows to one real-time dashboard.", emoji: "🔄" },
               { title: "QR codes in bulk", desc: "Print and distribute QR badges for your entire team in minutes — individually or as a ZIP download.", emoji: "🖨️" },
-              { title: "PIN-protected admin", desc: "Your kiosk stays in staff mode. Only managers with the PIN can access attendance data and settings.", emoji: "🔒" },
+              { title: "Secure admin access", desc: "Your kiosk stays in staff mode. Only authenticated admins can access attendance data and settings.", emoji: "🔒" },
             ].map((b) => (
               <div key={b.title} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-slate-600 transition-all">
                 <div className="text-3xl mb-4">{b.emoji}</div>
@@ -751,7 +890,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
 
           <p className="text-center text-slate-400 text-sm mt-8">
             Need more than 20 staff?{" "}
-            <a href="mailto:hello@accessgrid.app" className="text-cyan-600 hover:underline">Get in touch</a>
+            <a href={`mailto:${CONTACT_EMAIL}`} className="text-cyan-600 hover:underline">Get in touch</a>
           </p>
         </div>
       </section>
@@ -796,9 +935,9 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
           </div>
           <p className="text-slate-600 text-sm">© {new Date().getFullYear()} AccessGrid. All rights reserved.</p>
           <div className="flex gap-6 text-slate-500 text-sm">
-            <a href="#" className="hover:text-slate-300 transition-colors">Privacy</a>
-            <a href="#" className="hover:text-slate-300 transition-colors">Terms</a>
-            <a href="mailto:hello@accessgrid.app" className="hover:text-slate-300 transition-colors">Contact</a>
+            <button onClick={() => setShowPrivacy(true)} className="hover:text-slate-300 transition-colors">Privacy</button>
+            <button onClick={() => setShowTerms(true)} className="hover:text-slate-300 transition-colors">Terms</button>
+            <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-slate-300 transition-colors">Contact</a>
           </div>
         </div>
       </footer>
@@ -807,6 +946,8 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
         <CreateAccountModal
           onClose={() => setShowModal(false)}
           onEnterApp={onEnterApp}
+          onShowPrivacy={() => setShowPrivacy(true)}
+          onShowTerms={() => setShowTerms(true)}
           initialPlan={initialPlan}
         />
       )}
@@ -817,6 +958,8 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
           onSwitchToSignup={() => openSignup("monthly")}
         />
       )}
+      {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
+      {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
     </div>
   );
 }
