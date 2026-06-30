@@ -1,4 +1,4 @@
-import { APP_STORAGE_KEYS, DEFAULT_ADMIN_PIN, DEFAULT_COMPANY_NAME, DEFAULT_WELCOME_MESSAGE, DEFAULT_ANNOUNCEMENT, DEFAULT_ANNOUNCEMENT_INTERVAL } from "@/constants";
+import { APP_STORAGE_KEYS, DEFAULT_COMPANY_NAME, DEFAULT_WELCOME_MESSAGE, DEFAULT_ANNOUNCEMENT, DEFAULT_ANNOUNCEMENT_INTERVAL } from "@/constants";
 
 // ── Company ID ─────────────────────────────────────────────────────────
 /** Returns a stable unique ID for this company/installation. Auto-generated on first use. */
@@ -11,15 +11,6 @@ export function getCompanyId(): string {
   return id;
 }
 import type { StaffMember, AttendanceRecord } from "@/types";
-
-// ── PIN ────────────────────────────────────────────────────────────────
-export function getPin(): string {
-  return localStorage.getItem(APP_STORAGE_KEYS.pin) ?? DEFAULT_ADMIN_PIN;
-}
-
-export function setPin(newPin: string): void {
-  localStorage.setItem(APP_STORAGE_KEYS.pin, newPin);
-}
 
 // ── Staff ──────────────────────────────────────────────────────────────
 /** Returns ALL staff records across all companies (for backup/restore) */
@@ -151,7 +142,6 @@ export function exportAllData(): string {
     staff: getAllStaff(),
     companyId: getCompanyId(),
     attendance: getAttendance(),
-    pin: getPin(),
     companyName: getCompanyName(),
     welcomeMessage: getWelcomeMessage(),
     exportedAt: new Date().toISOString(),
@@ -170,7 +160,6 @@ export function importAllData(jsonStr: string): RestoreResult {
     if (data.companyId) localStorage.setItem(APP_STORAGE_KEYS.companyId, data.companyId);
     saveStaff(data.staff);
     localStorage.setItem(APP_STORAGE_KEYS.attendance, JSON.stringify(data.attendance));
-    if (data.pin && /^\d{4}$/.test(data.pin)) setPin(data.pin);
     if (data.companyName) setCompanyName(data.companyName);
     if (data.welcomeMessage) setWelcomeMessage(data.welcomeMessage);
     return { ok: true };

@@ -1,11 +1,7 @@
-export const DEFAULT_ADMIN_PIN = "1234";
-/** Emergency reset code shown only to IT admins inside the Settings tab */
-export const MASTER_RESET_CODE = "RESET-9999";
 export const INACTIVITY_TIMEOUT_MS = 60_000; // 60 seconds
 export const APP_STORAGE_KEYS = {
   staff: "kiosk_staff",
   attendance: "kiosk_attendance",
-  pin: "kiosk_admin_pin",
   companyName: "kiosk_company_name",
   welcomeMessage: "kiosk_welcome_message",
   companyId: "kiosk_company_id",

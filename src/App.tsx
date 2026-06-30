@@ -1,9 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import KioskMode from "@/components/kiosk/KioskMode";
-import PinPad from "@/components/admin/PinPad";
 import AdminMode from "@/components/admin/AdminMode";
 import LandingPage from "@/pages/LandingPage";
-import { onspaceClient } from "@/lib/onspaceClient";
 import type { AppMode } from "@/types";
 
 export default function App() {
@@ -11,35 +9,16 @@ export default function App() {
   const [skipAutoLogin, setSkipAutoLogin] = useState(false);
   const [mode, setMode] = useState<AppMode>("kiosk");
 
-  // On mount: check for active session (e.g. returning from Stripe checkout)
-  useEffect(() => {
-    onspaceClient.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setShowLanding(false);
-      }
-    });
-  }, []);
+  // Session check is handled by LandingPage's useEffect (auto-enters if session found)
 
   // ALL hooks must be declared before any conditional returns
   const enterApp = useCallback(() => { setShowLanding(false); setSkipAutoLogin(false); }, []);
 
-  // Skip PIN if user is already authenticated via Supabase
-  const handleOpenPin = useCallback(async () => {
-    const { data: { session } } = await onspaceClient.auth.getSession();
-    if (session?.user) {
-      setMode("admin");
-    } else {
-      setMode("pin");
-    }
-  }, []);
-
-  const handlePinSuccess = useCallback(() => setMode("admin"), []);
-  const handlePinCancel = useCallback(() => setMode("kiosk"), []);
+  // Go straight to admin — auth is handled by Supabase session
+  const handleOpenAdmin = useCallback(() => setMode("admin"), []);
   const handleGoHome = useCallback(() => { setSkipAutoLogin(true); setShowLanding(true); }, []);
   const handleExitAdmin = useCallback(() => setMode("kiosk"), []);
-  const handleLockAdmin = useCallback(() => setMode("locked"), []);
-  const handleUnlockAdmin = useCallback(() => setMode("admin"), []);
-  const handleUnlockCancel = useCallback(() => setMode("kiosk"), []);
+  const handleLockAdmin = useCallback(() => setMode("kiosk"), []);
 
   if (showLanding) {
     return <LandingPage onEnterApp={enterApp} skipAutoLogin={skipAutoLogin} />;
@@ -47,29 +26,13 @@ export default function App() {
 
   return (
     <>
-      {/* Kiosk is always mounted but hidden in admin/pin/locked mode */}
-      <div className={mode === "kiosk" || mode === "pin" ? "block" : "hidden"}>
-        <KioskMode onOpenPin={handleOpenPin} onGoHome={handleGoHome} />
+      {/* Kiosk — hidden while admin is open */}
+      <div className={mode === "kiosk" ? "block" : "hidden"}>
+        <KioskMode onOpenPin={handleOpenAdmin} onGoHome={handleGoHome} />
       </div>
-
-      {/* PIN overlay — fresh login */}
-      {mode === "pin" && (
-        <PinPad onSuccess={handlePinSuccess} onCancel={handlePinCancel} />
-      )}
 
       {/* Admin panel */}
       {mode === "admin" && <AdminMode onExit={handleExitAdmin} onLock={handleLockAdmin} />}
-
-      {/* Locked screen — PIN required to resume admin */}
-      {mode === "locked" && (
-        <>
-          {/* Blurred admin panel behind lock screen */}
-          <div className="pointer-events-none select-none filter blur-sm opacity-40">
-            <AdminMode onExit={handleExitAdmin} onLock={handleLockAdmin} />
-          </div>
-          <PinPad onSuccess={handleUnlockAdmin} onCancel={handleUnlockCancel} title="Session Locked" subtitle="Enter PIN to resume admin" />
-        </>
-      )}
     </>
   );
 }

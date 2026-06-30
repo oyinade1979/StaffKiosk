@@ -20,5 +20,5 @@ export interface AttendanceRecord {
   date: string; // YYYY-MM-DD
 }
 
-export type AppMode = "kiosk" | "pin" | "admin" | "locked";
+export type AppMode = "kiosk" | "admin";
 export type AdminTab = "dashboard" | "attendance" | "staff" | "qrcodes" | "settings";
