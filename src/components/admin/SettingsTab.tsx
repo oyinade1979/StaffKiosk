@@ -5,6 +5,7 @@ import {
   Pencil, Save, X, Bell, BellOff, Timer, PlayCircle, RotateCcw,
 } from "lucide-react";
 import { getPin, setPin, getCompanyName, setCompanyName, getWelcomeMessage, setWelcomeMessage, exportAllData, importAllData, getAnnouncement, setAnnouncement, getAnnouncementEnabled, setAnnouncementEnabled, getAnnouncementInterval, setAnnouncementInterval } from "@/lib/storage";
+import { saveSettings } from "@/lib/settingsService";
 import { MASTER_RESET_CODE, DEFAULT_ADMIN_PIN, DEFAULT_WELCOME_MESSAGE } from "@/constants";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ export default function SettingsTab() {
     setEditingCompany(false);
     setCompanySaved(true);
     window.dispatchEvent(new CustomEvent("kiosk-identity-changed"));
+    saveSettings({ companyName: trimmed });
     setTimeout(() => setCompanySaved(false), 2000);
   }
 
@@ -38,6 +40,7 @@ export default function SettingsTab() {
     setEditingWelcome(false);
     setWelcomeSaved(true);
     window.dispatchEvent(new CustomEvent("kiosk-identity-changed"));
+    saveSettings({ welcomeMessage: DEFAULT_WELCOME_MESSAGE });
     setTimeout(() => setWelcomeSaved(false), 2000);
   }
 
@@ -49,6 +52,7 @@ export default function SettingsTab() {
     setEditingWelcome(false);
     setWelcomeSaved(true);
     window.dispatchEvent(new CustomEvent("kiosk-identity-changed"));
+    saveSettings({ welcomeMessage: trimmed });
     setTimeout(() => setWelcomeSaved(false), 2000);
   }
 
@@ -88,6 +92,7 @@ export default function SettingsTab() {
     setAnnouncementEnabled(next);
     setAnnouncementEnabledState(next);
     window.dispatchEvent(new CustomEvent("kiosk-identity-changed"));
+    saveSettings({ announcementEnabled: next });
   }
 
   function saveAnnouncement() {
@@ -98,6 +103,7 @@ export default function SettingsTab() {
     setEditingAnnouncement(false);
     setAnnouncementSaved(true);
     window.dispatchEvent(new CustomEvent("kiosk-identity-changed"));
+    saveSettings({ announcement: trimmed, announcementInterval });
     setTimeout(() => setAnnouncementSaved(false), 2000);
   }
 
@@ -170,6 +176,7 @@ export default function SettingsTab() {
     if (newPin === currentInput) return setChangeError("New PIN must be different from the current PIN.");
     if (newPin !== confirmPin) return setChangeError("New PIN and confirmation do not match.");
     setPin(newPin);
+    saveSettings({ pin: newPin });
     setChangeSuccess(true);
     setCurrentInput(""); setNewPin(""); setConfirmPin("");
     setTimeout(() => { setChangeSuccess(false); setPinSection("idle"); }, 2500);
@@ -183,6 +190,7 @@ export default function SettingsTab() {
     if (pinError) return setResetError(pinError);
     if (resetNewPin !== resetConfirmPin) return setResetError("PIN and confirmation do not match.");
     setPin(resetNewPin);
+    saveSettings({ pin: resetNewPin });
     setResetSuccess(true);
     setResetCode(""); setResetNewPin(""); setResetConfirmPin("");
     setTimeout(() => { setResetSuccess(false); setPinSection("idle"); }, 2500);
@@ -468,6 +476,7 @@ export default function SettingsTab() {
                     setAnnouncementIntervalState(min);
                     setAnnouncementInterval(min);
                     window.dispatchEvent(new CustomEvent("kiosk-identity-changed"));
+                    saveSettings({ announcementInterval: min });
                   }}
                   className={cn(
                     "text-xs font-bold px-3 py-1.5 rounded-lg border transition",

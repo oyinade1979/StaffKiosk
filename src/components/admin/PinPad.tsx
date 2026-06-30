@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, Delete, ShieldOff, Clock, Eye, EyeOff, RefreshCw, AlertCircle, CheckCircle, ShieldAlert, Info, KeyRound } from "lucide-react";
 import { getPin, setPin } from "@/lib/storage";
+import { fetchSettings, saveSettings } from "@/lib/settingsService";
 import { MASTER_RESET_CODE } from "@/constants";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,11 @@ export default function PinPad({ onSuccess, onCancel, title = "Admin Access", su
   const [showMasterCode, setShowMasterCode] = useState(false);
 
   const isLocked = countdown > 0;
+
+  // Load PIN from Supabase on mount so cross-device PIN changes are respected
+  useEffect(() => {
+    fetchSettings();
+  }, []);
 
   // Sync module-level state into component on mount and update countdown
   useEffect(() => {
@@ -118,6 +124,7 @@ export default function PinPad({ onSuccess, onCancel, title = "Admin Access", su
     if (pinErr) return setResetError(pinErr);
     if (resetNewPin !== resetConfirmPin) return setResetError("PINs do not match.");
     setPin(resetNewPin);
+    saveSettings({ pin: resetNewPin });
     setResetSuccess(true);
     setTimeout(() => {
       setResetSuccess(false);

@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Settings } from "lucide-react";
 import QRScanner from "./QRScanner";
 import { getCompanyName, getWelcomeMessage, getAnnouncement, getAnnouncementEnabled, getAnnouncementInterval } from "@/lib/storage";
+import { fetchSettings } from "@/lib/settingsService";
 
 // Screensaver drift: returns a safe inset position (% from each edge)
 function randomDriftTarget() {
@@ -39,6 +40,17 @@ export default function KioskMode({ onOpenPin }: KioskModeProps) {
   // Load company identity from storage (re-read on each mount so Settings changes are picked up)
   const [companyName, setCompanyNameState] = useState(getCompanyName);
   const [welcomeMessage, setWelcomeMessageState] = useState(getWelcomeMessage);
+
+  // Hydrate from Supabase on mount so kiosk always shows latest cloud config
+  useEffect(() => {
+    fetchSettings().then((s) => {
+      setCompanyNameState(s.companyName);
+      setWelcomeMessageState(s.welcomeMessage);
+      setAnnouncementState(s.announcement);
+      setAnnouncementEnabledState(s.announcementEnabled);
+      setAnnouncementIntervalState(s.announcementInterval);
+    });
+  }, []);
 
   // Announcement state
   const [announcement, setAnnouncementState] = useState(getAnnouncement);
