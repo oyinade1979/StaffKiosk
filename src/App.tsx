@@ -1,11 +1,17 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import KioskMode from "@/components/kiosk/KioskMode";
 import PinPad from "@/components/admin/PinPad";
 import AdminMode from "@/components/admin/AdminMode";
+import { saveSettings } from "@/lib/settingsService";
 import type { AppMode } from "@/types";
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("kiosk");
+
+  // On first load, push current local settings to Supabase so all tables get seeded
+  useEffect(() => {
+    saveSettings({}).catch((e) => console.warn("[App] initial settings sync failed:", e));
+  }, []);
 
   const handleOpenPin = useCallback(() => setMode("pin"), []);
   const handlePinSuccess = useCallback(() => setMode("admin"), []);

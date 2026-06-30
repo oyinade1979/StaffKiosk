@@ -65,9 +65,13 @@ function rowToSettings(row: Record<string, unknown>): AppSettings {
 }
 
 // ── AppSettings → DB row ─────────────────────────────────────────────
+// Stable company UUID — same value used in attendanceService and companies table
+const COMPANY_UUID = "00000000-0000-0000-0000-000000000001";
+
 function settingsToRow(s: AppSettings) {
   return {
     id: SETTINGS_ROW_ID,
+    company_id: COMPANY_UUID,        // required NOT NULL column
     company_name: s.companyName,
     welcome_message: s.welcomeMessage,
     kiosk_admin_pin: s.pin,
@@ -142,10 +146,23 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<void>
 
   // Also sync company name to the companies table
   const { error: companyErr } = await supabase.from("companies").upsert({
-    id: "00000000-0000-0000-0000-000000000001",
+    id: COMPANY_UUID,
     company_name: merged.companyName,
   });
   if (companyErr) {
     console.warn("[settingsService] Supabase companies upsert error:", companyErr.message);
+  }
+
+  // Upsert a default admin profile entry into the profiles table
+  const { error: profileErr } = await supabase.from("profiles").upsert({
+    id: SETTINGS_ROW_ID,
+    company_id: COMPANY_UUID,
+    full_name: merged.companyName + " Admin",
+    role: "admin",
+  });
+  if (profileErr) {
+    console.warn("[settingsService] Supabase profiles upsert error:", profileErr.message);
+  } else {
+    console.log("[settingsService] profiles record synced");
   }
 }
