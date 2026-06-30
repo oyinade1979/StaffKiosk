@@ -1,10 +1,14 @@
-import { useState } from "react";
-import { UserPlus, Trash2, Users, Building2, AlertCircle, Mail, Pencil, Check, X } from "lucide-react";
-import { getStaff, addStaffMember, removeStaffMember, updateStaffMember } from "@/lib/storage";
+import { useState, useEffect, useCallback } from "react";
+import { UserPlus, Trash2, Users, Building2, AlertCircle, Mail, Pencil, Check, X, RefreshCw, Cloud, CloudOff } from "lucide-react";
+import { addStaffMember, getStaff } from "@/lib/storage";
+import { fetchStaff, upsertStaff, deleteStaff } from "@/lib/staffService";
 import type { StaffMember } from "@/types";
+
+type SyncStatus = "idle" | "loading" | "ok" | "error";
 
 export default function StaffTab() {
   const [staff, setStaff] = useState<StaffMember[]>(() => getStaff());
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
 
   // Add form
   const [name, setName] = useState("");
@@ -24,6 +28,18 @@ export default function StaffTab() {
   // Delete confirm
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
+  // ── Load from Supabase on mount ──────────────────────────────────────
+  const loadFromSupabase = useCallback(async () => {
+    setSyncStatus("loading");
+    const remote = await fetchStaff();
+    setStaff(remote);
+    setSyncStatus(remote.length >= 0 ? "ok" : "error");
+  }, []);
+
+  useEffect(() => {
+    loadFromSupabase();
+  }, [loadFromSupabase]);
+
   // ── Add helpers ──────────────────────────────────────────────────────
   function checkDuplicateEmail(val: string, excludeId?: string) {
     const normalized = val.trim().toLowerCase();
@@ -34,7 +50,7 @@ export default function StaffTab() {
     return dupe ? `Already registered to ${dupe.name} (${dupe.department})` : "";
   }
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!name.trim()) return setError("Name is required.");
     if (!department.trim()) return setError("Department is required.");
     if (!email.trim()) return setError("Work email is required.");
@@ -42,9 +58,21 @@ export default function StaffTab() {
       return setError("Please enter a valid email address.");
     if (emailWarning) return setError("Please use a unique email address.");
     setError("");
-    addStaffMember({ name: name.trim(), department: department.trim(), email: email.trim().toLowerCase() });
-    setStaff(getStaff());
+
+    // Create via local storage first (instant), then sync to Supabase
+    const newMember = addStaffMember({
+      name: name.trim(),
+      department: department.trim(),
+      email: email.trim().toLowerCase(),
+    });
+
+    // Optimistic UI update
+    setStaff((prev) => [...prev, newMember]);
     setName(""); setDepartment(""); setEmail(""); setEmailWarning("");
+
+    // Persist to Supabase in background
+    await upsertStaff(newMember);
+    setSyncStatus("ok");
   }
 
   // ── Edit helpers ─────────────────────────────────────────────────────
@@ -64,28 +92,74 @@ export default function StaffTab() {
     setEditEmailWarning("");
   }
 
-  function handleSaveEdit(id: string) {
+  async function handleSaveEdit(id: string) {
     if (!editName.trim()) return setEditError("Name is required.");
     if (!editDepartment.trim()) return setEditError("Department is required.");
     if (!editEmail.trim()) return setEditError("Work email is required.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail.trim()))
       return setEditError("Please enter a valid email address.");
     if (editEmailWarning) return setEditError("Please use a unique email address.");
-    updateStaffMember(id, {
+
+    const updated = staff.find((s) => s.id === id);
+    if (!updated) return;
+
+    const updatedMember: StaffMember = {
+      ...updated,
       name: editName.trim(),
       department: editDepartment.trim(),
       email: editEmail.trim().toLowerCase(),
-    });
-    setStaff(getStaff());
+    };
+
+    // Optimistic update
+    setStaff((prev) => prev.map((s) => (s.id === id ? updatedMember : s)));
     setEditingId(null);
     setEditError("");
+
+    // Persist to Supabase
+    await upsertStaff(updatedMember);
+    setSyncStatus("ok");
+  }
+
+  async function handleDelete(id: string) {
+    // Optimistic remove
+    setStaff((prev) => prev.filter((s) => s.id !== id));
+    setConfirmDelete(null);
+    if (editingId === id) setEditingId(null);
+
+    // Delete from Supabase
+    await deleteStaff(id);
+    setSyncStatus("ok");
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-xl font-bold text-white">Manage Staff</h2>
-        <p className="text-slate-400 text-sm mt-0.5">{staff.length} registered staff members</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-white">Manage Staff</h2>
+          <p className="text-slate-400 text-sm mt-0.5">{staff.length} registered staff members</p>
+        </div>
+
+        {/* Sync status indicator */}
+        <div className="flex items-center gap-2">
+          {syncStatus === "loading" && (
+            <div className="flex items-center gap-1.5 text-slate-500 text-xs">
+              <RefreshCw size={12} className="animate-spin" /> Syncing…
+            </div>
+          )}
+          {syncStatus === "ok" && (
+            <div className="flex items-center gap-1.5 text-emerald-400 text-xs">
+              <Cloud size={12} /> Saved to cloud
+            </div>
+          )}
+          {syncStatus === "error" && (
+            <button
+              onClick={loadFromSupabase}
+              className="flex items-center gap-1.5 text-amber-400 text-xs hover:text-amber-300 transition"
+            >
+              <CloudOff size={12} /> Offline — Retry
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Add form ── */}
@@ -157,7 +231,12 @@ export default function StaffTab() {
       </div>
 
       {/* ── Staff list ── */}
-      {staff.length === 0 ? (
+      {syncStatus === "loading" && staff.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-500">
+          <RefreshCw size={36} className="opacity-40 animate-spin" />
+          <p className="text-lg font-medium">Loading staff from cloud…</p>
+        </div>
+      ) : staff.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-500">
           <Users size={40} className="opacity-40" />
           <p className="text-lg font-medium">No staff registered yet</p>
@@ -220,7 +299,7 @@ export default function StaffTab() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-slate-400 text-xs">Remove?</span>
                       <button
-                        onClick={() => { removeStaffMember(s.id); setStaff(getStaff()); setConfirmDelete(null); if (editingId === s.id) setEditingId(null); }}
+                        onClick={() => handleDelete(s.id)}
                         className="text-xs bg-red-500 hover:bg-red-400 text-white px-3 py-1.5 rounded-lg font-semibold transition"
                       >
                         Yes

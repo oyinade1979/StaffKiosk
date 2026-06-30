@@ -1,13 +1,19 @@
-import { useState } from "react";
-import { QrCode, Download, Users, Mail, Send, CheckCircle, Loader2, PackageCheck } from "lucide-react";
+import { useState, useEffect } from "react";
+import { QrCode, Download, Users, Mail, Send, CheckCircle, Loader2, PackageCheck, RefreshCw } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import { fetchStaff } from "@/lib/staffService";
 import { getStaff } from "@/lib/storage";
 import type { StaffMember } from "@/types";
 
 export default function QRCodesTab() {
-  const [staff] = useState<StaffMember[]>(() => getStaff());
+  const [staff, setStaff] = useState<StaffMember[]>(() => getStaff());
+
+  // Load from Supabase on mount so QR tab always reflects cloud data
+  useEffect(() => {
+    fetchStaff().then((remote) => setStaff(remote));
+  }, []);
   const [selected, setSelected] = useState<StaffMember | null>(null);
   const [emailSent, setEmailSent] = useState(false);
 
