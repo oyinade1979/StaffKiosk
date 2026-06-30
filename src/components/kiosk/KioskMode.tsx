@@ -21,9 +21,10 @@ const ACCENT_COLORS = [
 
 interface KioskModeProps {
   onOpenPin: () => void;
+  onGoHome?: () => void;
 }
 
-export default function KioskMode({ onOpenPin }: KioskModeProps) {
+export default function KioskMode({ onOpenPin, onGoHome }: KioskModeProps) {
   const [showHint, setShowHint] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -423,6 +424,20 @@ export default function KioskMode({ onOpenPin }: KioskModeProps) {
             }
           `}</style>
         </div>
+      )}
+
+      {/* Back to home — top-left corner */}
+      {onGoHome && (
+        <button
+          onClick={onGoHome}
+          className="absolute top-4 left-5 z-30 flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-300 transition-colors opacity-40 hover:opacity-80 select-none"
+          aria-label="Back to home"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+          Home
+        </button>
       )}
 
       {/* Hidden admin trigger */}

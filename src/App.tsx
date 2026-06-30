@@ -14,6 +14,7 @@ export default function App() {
   const handleOpenPin = useCallback(() => setMode("pin"), []);
   const handlePinSuccess = useCallback(() => setMode("admin"), []);
   const handlePinCancel = useCallback(() => setMode("kiosk"), []);
+  const handleGoHome = useCallback(() => setShowLanding(true), []);
   const handleExitAdmin = useCallback(() => setMode("kiosk"), []);
   const handleLockAdmin = useCallback(() => setMode("locked"), []);
   const handleUnlockAdmin = useCallback(() => setMode("admin"), []);
@@ -27,7 +28,7 @@ export default function App() {
     <>
       {/* Kiosk is always mounted but hidden in admin/pin/locked mode */}
       <div className={mode === "kiosk" || mode === "pin" ? "block" : "hidden"}>
-        <KioskMode onOpenPin={handleOpenPin} />
+        <KioskMode onOpenPin={handleOpenPin} onGoHome={handleGoHome} />
       </div>
 
       {/* PIN overlay — fresh login */}
