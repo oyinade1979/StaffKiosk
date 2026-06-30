@@ -196,10 +196,17 @@ export async function cloudCheckIn(
     console.warn("[attendanceService] Check-in lookup error:", fetchErr.message);
   }
 
-  if (existing) {
+  // Also check localStorage in case a previous check-in only saved locally
+  const localAll = getLocal();
+  const localRecord = localAll.find((r) => r.staffId === staffId && r.date === today);
+
+  if (existing || localRecord) {
     console.log("[attendanceService] already checked in today");
-    const staffMap = new Map([[staffId, { name: staffName, department }]]);
-    return rowToRecord(existing as Record<string, unknown>, staffMap);
+    if (existing) {
+      const staffMap = new Map([[staffId, { name: staffName, department }]]);
+      return rowToRecord(existing as Record<string, unknown>, staffMap);
+    }
+    return localRecord!;
   }
 
   const now = new Date();
@@ -236,12 +243,21 @@ export async function cloudCheckOut(
     .maybeSingle();
 
   if (error || !existing) {
-    // Fall back to localStorage
+    // Fall back to localStorage — check-in may only exist locally if Supabase insert failed
     const local = getLocal();
     const localRecord = local.find((r) => r.staffId === staffId && r.date === today);
     if (!localRecord) return null;
     if (localRecord.checkOutTime) return { record: localRecord, alreadyOut: true };
-    return null;
+
+    // Perform checkout on the local-only record
+    const checkOutTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const updated: AttendanceRecord = {
+      ...localRecord,
+      checkOutTime,
+      shiftDuration: formatDuration(localRecord.checkInTime, checkOutTime),
+    };
+    await upsertAttendance(updated);
+    return { record: updated, alreadyOut: false };
   }
 
   const staffMap = new Map([[staffId, { name: "", department: "" }]]);

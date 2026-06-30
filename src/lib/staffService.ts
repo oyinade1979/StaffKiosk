@@ -71,9 +71,19 @@ export async function fetchStaff(): Promise<StaffMember[]> {
   }
 
   const members = (data ?? []).map(rowToMember);
-  // Sync remote data into localStorage so existing code still works
-  syncRemoteToLocal(members);
-  return members;
+
+  if (members.length > 0) {
+    // Only sync to localStorage when Supabase actually returned records.
+    // If it returns 0 rows (e.g. all inserts failed due to type mismatch),
+    // keep whatever is in localStorage so the scanner still works.
+    syncRemoteToLocal(members);
+    return members;
+  }
+
+  // Supabase returned 0 rows — fall back to localStorage so staff are never lost.
+  const local = getLocalStaff();
+  console.log("[staffService] Supabase returned 0 rows — using localStorage fallback (", local.length, "records)");
+  return local;
 }
 
 /** Upsert a staff member into Supabase and localStorage */
