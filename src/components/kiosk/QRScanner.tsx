@@ -60,7 +60,9 @@ export default function QRScanner() {
             return;
           }
 
-          const today = new Date().toISOString().slice(0, 10);
+          // Use local date (not UTC) to match how attendance records store their date
+          const _d = new Date();
+          const today = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`;
 
           // Check if staff already has a record today in local cache
           let localRecord: AttendanceRecord | undefined;
