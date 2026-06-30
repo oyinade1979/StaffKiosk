@@ -10,14 +10,15 @@ export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [mode, setMode] = useState<AppMode>("kiosk");
 
-  if (showLanding) {
-    return <LandingPage onEnterApp={() => setShowLanding(false)} />;
-  }
-
   // On first load, push current local settings to Supabase so all tables get seeded
+  // Must be declared before any conditional returns (Rules of Hooks)
   useEffect(() => {
     saveSettings({}).catch((e) => console.warn("[App] initial settings sync failed:", e));
   }, []);
+
+  if (showLanding) {
+    return <LandingPage onEnterApp={() => setShowLanding(false)} />;
+  }
 
   const handleOpenPin = useCallback(() => setMode("pin"), []);
   const handlePinSuccess = useCallback(() => setMode("admin"), []);

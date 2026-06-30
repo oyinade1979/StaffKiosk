@@ -16,9 +16,10 @@ const PLANS: PlanType[] = [
 
 interface CreateAccountModalProps {
   onClose: () => void;
+  onEnterApp: () => void;
 }
 
-function CreateAccountModal({ onClose }: CreateAccountModalProps) {
+function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
   const [plan, setPlan] = useState<"monthly" | "yearly">("monthly");
   const [form, setForm] = useState({ company: "", email: "", password: "" });
   const [submitted, setSubmitted] = useState(false);
@@ -48,17 +49,17 @@ function CreateAccountModal({ onClose }: CreateAccountModalProps) {
         {submitted ? (
           <div className="text-center py-6">
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl">✓</span>
+              <span className="text-3xl text-emerald-600">✓</span>
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">You're on the list!</h2>
-            <p className="text-slate-500 text-sm leading-relaxed">
-              We'll be in touch at <strong>{form.email}</strong> to activate your free 7-day trial for <strong>{form.company}</strong>.
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Account created!</h2>
+            <p className="text-slate-500 text-sm leading-relaxed mb-6">
+              Welcome, <strong>{form.company}</strong>! Your 7-day free trial is active. Let's set up your kiosk.
             </p>
             <button
-              onClick={onClose}
-              className="mt-6 w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-3 rounded-xl transition-colors"
+              onClick={onEnterApp}
+              className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-3 rounded-xl transition-colors"
             >
-              Got it
+              Open Kiosk →
             </button>
           </div>
         ) : (
@@ -164,7 +165,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans">
+    <div className="min-h-screen bg-white text-slate-900 font-sans" onKeyDown={(e) => e.key === "Escape" && onClose()}>
       {/* ── Navbar ── */}
       <header className="fixed top-0 inset-x-0 z-40 bg-white/80 backdrop-blur border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -492,7 +493,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
         </div>
       </footer>
 
-      {showModal && <CreateAccountModal onClose={() => setShowModal(false)} />}
+      {showModal && <CreateAccountModal onClose={() => setShowModal(false)} onEnterApp={onEnterApp} />}
     </div>
   );
 }
