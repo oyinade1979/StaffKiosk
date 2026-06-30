@@ -24,7 +24,7 @@ export default function QRScanner() {
   useEffect(() => {
     fetchStaff().then((list) => {
       staffCacheRef.current = list;
-      console.log("[QRScanner] staff loaded:", list.length, list.map(s => ({ id: s.id, qrCode: s.qrCode })));
+      console.log("[QRScanner] staff loaded on mount:", list.length, list.map(s => ({ id: s.id, qrCode: s.qrCode, name: s.name })));
     });
   }, []);
 
@@ -41,14 +41,17 @@ export default function QRScanner() {
           if (cooldownRef.current) return;
           cooldownRef.current = true;
 
-          console.log("[QRScanner] scanned:", decodedText);
+          const trimmed = decodedText.trim();
+          console.log("[QRScanner] scanned:", JSON.stringify(trimmed));
 
-          // Always reload from Supabase to guarantee fresh staff list
-          staffCacheRef.current = await fetchStaff();
+          // Use cached staff list — only re-fetch from Supabase if cache is empty
+          if (staffCacheRef.current.length === 0) {
+            console.log("[QRScanner] cache empty, fetching from Supabase...");
+            staffCacheRef.current = await fetchStaff();
+          }
 
           // Look up staff by id or qrCode — trim whitespace from scanned value
           const allStaff = staffCacheRef.current;
-          const trimmed = decodedText.trim();
           console.log("[QRScanner] looking in", allStaff.length, "staff records");
           allStaff.forEach(s => console.log("  staff:", { id: s.id, qrCode: s.qrCode, name: s.name }));
           const staff = allStaff.find(
@@ -58,7 +61,7 @@ export default function QRScanner() {
               s.id.trim() === trimmed ||
               (s.qrCode && s.qrCode.trim() === trimmed)
           );
-          console.log("[QRScanner] decoded:", JSON.stringify(trimmed), "matched:", staff?.name ?? "NONE");
+          console.log("[QRScanner] matched:", staff?.name ?? "NONE", "id:", staff?.id);
 
           if (!staff) {
             setResult({ state: "unknown" });
@@ -72,15 +75,19 @@ export default function QRScanner() {
           const today = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`;
 
           // Check if staff already has a record today in local cache
+          // Match against BOTH staff.id AND staff.qrCode to handle ID mismatches between devices
           let localRecord: AttendanceRecord | undefined;
           try {
             const localAll: AttendanceRecord[] = JSON.parse(localStorage.getItem("kiosk_attendance") ?? "[]");
-            localRecord = localAll.find((r) => r.staffId === staff.id && r.date === today);
+            localRecord = localAll.find(
+              (r) => (r.staffId === staff.id || r.staffId === staff.qrCode || r.staffId === trimmed) && r.date === today
+            );
+            console.log("[QRScanner] localRecord for today:", localRecord ? `found (id=${localRecord.id}, checkOut=${localRecord.checkOutTime})` : "none");
           } catch { /* ignore */ }
 
           if (!localRecord) {
             // First scan today — check in
-            const record = await cloudCheckIn(staff.id, staff.name, staff.department);
+            const record = await cloudCheckIn(staff.id, staff.name, staff.department, trimmed);
             if (record) {
               setResult({ state: "checkin", record });
               playCheckInSound();
@@ -90,7 +97,7 @@ export default function QRScanner() {
             }
           } else if (!localRecord.checkOutTime) {
             // Already checked in but not out — check out
-            const outcome = await cloudCheckOut(staff.id);
+            const outcome = await cloudCheckOut(staff.id, trimmed);
             if (outcome) {
               if (outcome.alreadyOut) {
                 setResult({ state: "already_out", record: outcome.record });

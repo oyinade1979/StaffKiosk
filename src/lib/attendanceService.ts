@@ -176,29 +176,34 @@ function getLocalToday(): string {
 export async function cloudCheckIn(
   staffId: string,
   staffName: string,
-  department: string
+  department: string,
+  scannedValue?: string
 ): Promise<AttendanceRecord | null> {
   const today = getLocalToday();
   // Use UTC midnight boundaries to cover the full local day regardless of timezone
   const todayStart = new Date(today + "T00:00:00").toISOString();
   const todayEnd = new Date(today + "T23:59:59").toISOString();
 
-  // Check if already checked in today via Supabase
-  const { data: existing, error: fetchErr } = await supabase
-    .from(TABLE)
-    .select("*")
-    .eq("staff_id", staffId)
-    .gte("check_in", todayStart)
-    .lte("check_in", todayEnd)
-    .maybeSingle();
+  // Collect all candidate IDs to check (the staff id and the scanned QR value)
+  const candidateIds = Array.from(new Set([staffId, scannedValue].filter(Boolean) as string[]));
 
-  if (fetchErr) {
-    console.warn("[attendanceService] Check-in lookup error:", fetchErr.message);
+  // Check if already checked in today via Supabase (try each candidate ID)
+  let existing: Record<string, unknown> | null = null;
+  for (const cid of candidateIds) {
+    const { data, error: fetchErr } = await supabase
+      .from(TABLE)
+      .select("*")
+      .eq("staff_id", cid)
+      .gte("check_in", todayStart)
+      .lte("check_in", todayEnd)
+      .maybeSingle();
+    if (fetchErr) console.warn("[attendanceService] Check-in lookup error:", fetchErr.message);
+    if (data) { existing = data as Record<string, unknown>; break; }
   }
 
   // Also check localStorage in case a previous check-in only saved locally
   const localAll = getLocal();
-  const localRecord = localAll.find((r) => r.staffId === staffId && r.date === today);
+  const localRecord = localAll.find((r) => candidateIds.includes(r.staffId) && r.date === today);
 
   if (existing || localRecord) {
     console.log("[attendanceService] already checked in today");
@@ -227,25 +232,43 @@ export async function cloudCheckIn(
 
 /** Check out a staff member — updates existing attendance record */
 export async function cloudCheckOut(
-  staffId: string
+  staffId: string,
+  scannedValue?: string
 ): Promise<{ record: AttendanceRecord; alreadyOut: boolean } | null> {
   const today = getLocalToday();
   const todayStart = new Date(today + "T00:00:00").toISOString();
   const todayEnd = new Date(today + "T23:59:59").toISOString();
 
-  // Find today's check-in from Supabase
-  const { data: existing, error } = await supabase
-    .from(TABLE)
-    .select("*")
-    .eq("staff_id", staffId)
-    .gte("check_in", todayStart)
-    .lte("check_in", todayEnd)
-    .maybeSingle();
-
-  if (error || !existing) {
-    // Fall back to localStorage — check-in may only exist locally if Supabase insert failed
+  // Helper: find today's local record matching any of the provided IDs
+  function findLocal(ids: string[]): AttendanceRecord | undefined {
     const local = getLocal();
-    const localRecord = local.find((r) => r.staffId === staffId && r.date === today);
+    return local.find((r) => ids.includes(r.staffId) && r.date === today);
+  }
+
+  // Collect all IDs that could have been stored as staffId
+  const candidateIds = Array.from(new Set([staffId, scannedValue].filter(Boolean) as string[]));
+  console.log("[attendanceService] cloudCheckOut candidateIds:", candidateIds);
+
+  // Find today's check-in from Supabase (try each candidate ID)
+  let existing: Record<string, unknown> | null = null;
+  let fetchError: unknown = null;
+  for (const cid of candidateIds) {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("*")
+      .eq("staff_id", cid)
+      .gte("check_in", todayStart)
+      .lte("check_in", todayEnd)
+      .maybeSingle();
+    if (data) { existing = data as Record<string, unknown>; break; }
+    fetchError = error;
+  }
+
+  if (!existing) {
+    console.log("[attendanceService] no Supabase record — checking localStorage", fetchError);
+    // Fall back to localStorage — check-in may only exist locally if Supabase insert failed
+    const localRecord = findLocal(candidateIds);
+    console.log("[attendanceService] localStorage record:", localRecord);
     if (!localRecord) return null;
     if (localRecord.checkOutTime) return { record: localRecord, alreadyOut: true };
 
