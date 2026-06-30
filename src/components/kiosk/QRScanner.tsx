@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { getStaff } from "@/lib/storage";
+import { fetchStaff } from "@/lib/staffService";
 import { cloudCheckIn, cloudCheckOut } from "@/lib/attendanceService";
 import { playCheckInSound, playCheckOutSound, playErrorSound, playWarningSound } from "@/lib/audio";
-import type { AttendanceRecord } from "@/types";
+import type { AttendanceRecord, StaffMember } from "@/types";
 
 type ScanState = "idle" | "checkin" | "checkout" | "already_out" | "unknown" | "error";
 
@@ -17,6 +17,16 @@ export default function QRScanner() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [result, setResult] = useState<CheckInResult>({ state: "idle" });
   const cooldownRef = useRef(false);
+  // Keep a fresh staff list loaded from Supabase
+  const staffCacheRef = useRef<StaffMember[]>([]);
+
+  // Load staff from Supabase on mount so scanner has up-to-date data
+  useEffect(() => {
+    fetchStaff().then((list) => {
+      staffCacheRef.current = list;
+      console.log("[QRScanner] staff loaded:", list.length, list.map(s => ({ id: s.id, qrCode: s.qrCode })));
+    });
+  }, []);
 
   useEffect(() => {
     const scannerId = "qr-reader";
@@ -31,8 +41,16 @@ export default function QRScanner() {
           if (cooldownRef.current) return;
           cooldownRef.current = true;
 
+          console.log("[QRScanner] scanned:", decodedText);
+
+          // If cache is empty, try reloading from Supabase first
+          if (staffCacheRef.current.length === 0) {
+            staffCacheRef.current = await fetchStaff();
+          }
+
           // Look up staff by id or qrCode
-          const allStaff = getStaff();
+          const allStaff = staffCacheRef.current;
+          console.log("[QRScanner] looking in", allStaff.length, "staff records");
           const staff = allStaff.find((s) => s.id === decodedText || s.qrCode === decodedText);
 
           if (!staff) {
