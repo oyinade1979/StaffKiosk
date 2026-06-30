@@ -77,7 +77,7 @@ function rowToRecord(
   };
 }
 
-// Stable company UUID — used to satisfy the NOT NULL company_id column
+// Stable company UUID — matches the record inserted into public.companies
 const COMPANY_UUID = "00000000-0000-0000-0000-000000000001";
 
 // ── AttendanceRecord → DB row (all columns including extras) ────────
@@ -152,12 +152,20 @@ export async function fetchAttendance(): Promise<AttendanceRecord[]> {
 /** Upsert (insert or update) a single attendance record to Supabase + localStorage */
 async function upsertAttendance(record: AttendanceRecord): Promise<void> {
   const row = recordToRow(record);
-  console.log("[attendanceService] upsert row:", row);
-  const { error } = await supabase.from(TABLE).upsert(row);
+  console.log("[attendanceService] upsert row:", JSON.stringify(row, null, 2));
+  const { data, error } = await supabase.from(TABLE).upsert(row).select();
   if (error) {
-    console.warn("[attendanceService] Supabase upsert error:", error.message);
+    console.error("[attendanceService] Supabase upsert FAILED:", error.message, error.code, error.details, error.hint);
+    // Retry with company_id = null in case FK constraint blocks it
+    const rowNoCompany = { ...row, company_id: null };
+    const { error: retryErr } = await supabase.from(TABLE).upsert(rowNoCompany);
+    if (retryErr) {
+      console.error("[attendanceService] Retry also failed:", retryErr.message, retryErr.code);
+    } else {
+      console.log("[attendanceService] retry upsert OK (company_id=null) for", record.staffName);
+    }
   } else {
-    console.log("[attendanceService] upsert OK for", record.staffName);
+    console.log("[attendanceService] upsert OK for", record.staffName, "→ rows affected:", data?.length);
   }
 
   // Always update localStorage regardless of Supabase outcome
