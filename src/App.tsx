@@ -22,7 +22,17 @@ export default function App() {
 
   // ALL hooks must be declared before any conditional returns
   const enterApp = useCallback(() => { setShowLanding(false); setSkipAutoLogin(false); }, []);
-  const handleOpenPin = useCallback(() => setMode("pin"), []);
+
+  // Skip PIN if user is already authenticated via Supabase
+  const handleOpenPin = useCallback(async () => {
+    const { data: { session } } = await onspaceClient.auth.getSession();
+    if (session?.user) {
+      setMode("admin");
+    } else {
+      setMode("pin");
+    }
+  }, []);
+
   const handlePinSuccess = useCallback(() => setMode("admin"), []);
   const handlePinCancel = useCallback(() => setMode("kiosk"), []);
   const handleGoHome = useCallback(() => { setSkipAutoLogin(true); setShowLanding(true); }, []);

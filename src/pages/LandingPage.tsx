@@ -437,6 +437,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
   const [showModal, setShowModal] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [initialPlan, setInitialPlan] = useState<"monthly" | "yearly">("monthly");
+  const [loggedInUser, setLoggedInUser] = useState<{ email: string; name: string } | null>(null);
 
   // Check if returning from Stripe checkout
   useEffect(() => {
@@ -447,15 +448,25 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
     }
   }, [onEnterApp]);
 
-  // If returning from Stripe, or already has a session (and not manually navigating home), auto-enter
+  // Check session — auto-enter if not navigating home, else show user info in navbar
   useEffect(() => {
-    if (skipAutoLogin) return;
     onspaceClient.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        onEnterApp();
+        const name =
+          session.user.user_metadata?.company_name ||
+          session.user.user_metadata?.username ||
+          session.user.email?.split("@")[0] ||
+          "Account";
+        setLoggedInUser({ email: session.user.email ?? "", name });
+        if (!skipAutoLogin) onEnterApp();
       }
     });
   }, [onEnterApp, skipAutoLogin]);
+
+  const handleLogout = async () => {
+    await onspaceClient.auth.signOut();
+    setLoggedInUser(null);
+  };
 
   const openSignup = (plan: "monthly" | "yearly" = "monthly") => {
     setInitialPlan(plan);
@@ -484,17 +495,44 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
           <nav className="hidden md:flex items-center gap-8 text-sm text-slate-600">
             <button onClick={() => scrollTo("how-it-works")} className="hover:text-slate-900 transition-colors">How it works</button>
             <button onClick={() => scrollTo("pricing")} className="hover:text-slate-900 transition-colors">Pricing</button>
-            <button onClick={() => setShowLogin(true)} className="hover:text-slate-900 transition-colors font-medium">Log In</button>
-            {skipAutoLogin && (
-              <button onClick={onEnterApp} className="text-cyan-600 hover:text-cyan-700 transition-colors font-semibold">↩ Back to Kiosk</button>
+            {loggedInUser ? (
+              /* ── Logged-in user info ── */
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {loggedInUser.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="leading-tight">
+                    <div className="text-xs font-semibold text-slate-800">{loggedInUser.name}</div>
+                    <div className="text-xs text-slate-400 max-w-[140px] truncate">{loggedInUser.email}</div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="text-xs text-slate-400 hover:text-red-500 transition-colors font-medium"
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setShowLogin(true)} className="hover:text-slate-900 transition-colors font-medium">Log In</button>
             )}
           </nav>
-          <button
-            onClick={() => openSignup("monthly")}
-            className="bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
-          >
-            Start Free Trial
-          </button>
+          {loggedInUser ? (
+            <button
+              onClick={onEnterApp}
+              className="bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
+            >
+              Open Kiosk →
+            </button>
+          ) : (
+            <button
+              onClick={() => openSignup("monthly")}
+              className="bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
+            >
+              Start Free Trial
+            </button>
+          )}
         </div>
       </header>
 
