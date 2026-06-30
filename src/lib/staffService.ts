@@ -52,7 +52,7 @@ function memberToRow(m: StaffMember) {
   };
 }
 
-/** Fetch all staff for the current company from Supabase, sync to localStorage */
+/** Fetch all staff from Supabase (no company filter — single-tenant), sync to localStorage */
 export async function fetchStaff(): Promise<StaffMember[]> {
   const companyId = getCompanyId();
   console.log("[staffService] fetchStaff companyId:", companyId);
@@ -60,7 +60,6 @@ export async function fetchStaff(): Promise<StaffMember[]> {
   const { data, error } = await supabase
     .from("staff")
     .select("*")
-    .eq("company_id", companyId)
     .order("created_at", { ascending: true });
 
   if (error) {
