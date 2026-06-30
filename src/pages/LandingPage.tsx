@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import dashboardPreview from "@/assets/dashboard-preview.jpg";
+import dashboardPreview from "@/assets/dashboard-preview.png";
 import { onspaceClient } from "@/lib/onspaceClient";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 

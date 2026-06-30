@@ -89,10 +89,12 @@ export default function SettingsTab() {
   // ── Manage Subscription ─────────────────────────────────────────────
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalError, setPortalError] = useState("");
+  const [noCustomer, setNoCustomer] = useState(false);
 
   async function handleManageSubscription() {
     setPortalLoading(true);
     setPortalError("");
+    setNoCustomer(false);
 
     const { data: { session } } = await onspaceClient.auth.getSession();
     const token = session?.access_token;
@@ -105,9 +107,19 @@ export default function SettingsTab() {
     if (error) {
       let msg = error.message;
       if (error instanceof FunctionsHttpError) {
-        try { const txt = await error.context?.text(); msg = txt || msg; } catch { /* ignore */ }
+        try {
+          const txt = await error.context?.text();
+          if (txt) {
+            try { const parsed = JSON.parse(txt); msg = parsed.error || parsed.message || txt; }
+            catch { msg = txt; }
+          }
+        } catch { /* ignore */ }
       }
-      setPortalError(msg || "Unable to open billing portal. Please try again.");
+      if (msg.toLowerCase().includes("no stripe customer")) {
+        setNoCustomer(true);
+      } else {
+        setPortalError(msg || "Unable to open billing portal. Please try again.");
+      }
       setPortalLoading(false);
       return;
     }
@@ -404,6 +416,18 @@ export default function SettingsTab() {
               You'll be redirected to the Stripe billing portal where you can update your payment method, download invoices, switch plans, or cancel your subscription.
             </p>
           </div>
+
+          {noCustomer && (
+            <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+              <AlertCircle size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-amber-200 text-xs font-semibold mb-0.5">No active subscription found</p>
+                <p className="text-amber-300/70 text-xs leading-relaxed">
+                  Your account isn't linked to a Stripe subscription yet. Please go back to the home page and complete the sign-up payment flow.
+                </p>
+              </div>
+            </div>
+          )}
 
           {portalError && (
             <div className="flex items-start gap-2 text-xs rounded-xl px-3 py-2.5 border bg-red-500/10 border-red-500/20 text-red-300">
