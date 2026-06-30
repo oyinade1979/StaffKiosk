@@ -3,11 +3,21 @@ import KioskMode from "@/components/kiosk/KioskMode";
 import PinPad from "@/components/admin/PinPad";
 import AdminMode from "@/components/admin/AdminMode";
 import LandingPage from "@/pages/LandingPage";
+import { onspaceClient } from "@/lib/onspaceClient";
 import type { AppMode } from "@/types";
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [mode, setMode] = useState<AppMode>("kiosk");
+
+  // On mount: check for active session (e.g. returning from Stripe checkout)
+  useEffect(() => {
+    onspaceClient.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setShowLanding(false);
+      }
+    });
+  }, []);
 
   // ALL hooks must be declared before any conditional returns
   const enterApp = useCallback(() => setShowLanding(false), []);

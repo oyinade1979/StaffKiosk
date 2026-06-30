@@ -1,12 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dashboardPreview from "@/assets/dashboard-preview.jpg";
+import { onspaceClient } from "@/lib/onspaceClient";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 
+// ─── Stripe price IDs ───────────────────────────────────────────────
+const PRICE_IDS = {
+  monthly: "price_1To01MP9fDU1WUDlTcQMCYy8",
+  yearly: "price_1To01bP9fDU1WUDl6qRAczWc",
+};
+
+// ─── helpers ────────────────────────────────────────────────────────
+async function invokeFn(fnName: string, body: object): Promise<{ url?: string; error?: string }> {
+  const { data: { session } } = await onspaceClient.auth.getSession();
+  const token = session?.access_token;
+
+  const { data, error } = await onspaceClient.functions.invoke(fnName, {
+    body,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (error) {
+    let msg = error.message;
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const txt = await error.context?.text();
+        msg = txt || msg;
+      } catch { /* ignore */ }
+    }
+    return { error: msg };
+  }
+  return data as { url?: string };
+}
+
+// ─── Login Modal ─────────────────────────────────────────────────────
 interface LoginModalProps {
   onClose: () => void;
   onEnterApp: () => void;
+  onSwitchToSignup: () => void;
 }
 
-function LoginModal({ onClose, onEnterApp }: LoginModalProps) {
+function LoginModal({ onClose, onEnterApp, onSwitchToSignup }: LoginModalProps) {
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -15,23 +48,19 @@ function LoginModal({ onClose, onEnterApp }: LoginModalProps) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1000));
+
+    const { error: authError } = await onspaceClient.auth.signInWithPassword({
+      email: form.email.trim().toLowerCase(),
+      password: form.password,
+    });
+
     setLoading(false);
-    // Check if email is registered
-    const registered: string[] = JSON.parse(localStorage.getItem("ag_registered_emails") || "[]");
-    if (!registered.includes(form.email.toLowerCase())) {
-      setError("No account found with this email. Please sign up first.");
-      return;
-    }
-    if (form.password.length < 8) {
+
+    if (authError) {
       setError("Invalid email or password. Please try again.");
       return;
     }
-    const user = JSON.parse(localStorage.getItem("ag_current_user") || "{}");
-    if (user.email?.toLowerCase() !== form.email.toLowerCase()) {
-      setError("Invalid email or password. Please try again.");
-      return;
-    }
+
     onEnterApp();
   };
 
@@ -80,12 +109,9 @@ function LoginModal({ onClose, onEnterApp }: LoginModalProps) {
             />
           </div>
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-slate-700" htmlFor="login-password">
-                Password
-              </label>
-              <button type="button" className="text-xs text-cyan-600 hover:underline">Forgot password?</button>
-            </div>
+            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="login-password">
+              Password
+            </label>
             <input
               id="login-password"
               type="password"
@@ -111,7 +137,7 @@ function LoginModal({ onClose, onEnterApp }: LoginModalProps) {
           <button
             type="button"
             className="text-cyan-600 font-semibold hover:underline"
-            onClick={() => { onClose(); }}
+            onClick={() => { onClose(); onSwitchToSignup(); }}
           >
             Start free trial
           </button>
@@ -121,6 +147,7 @@ function LoginModal({ onClose, onEnterApp }: LoginModalProps) {
   );
 }
 
+// ─── Plan definitions ────────────────────────────────────────────────
 interface PlanType {
   id: "monthly" | "yearly";
   label: string;
@@ -134,41 +161,98 @@ const PLANS: PlanType[] = [
   { id: "yearly", label: "Yearly", price: "£240", sub: "/year · save £60", badge: "Best Value" },
 ];
 
+// ─── Create Account Modal ─────────────────────────────────────────────
+type Step = "form" | "verifyOtp" | "redirecting";
+
 interface CreateAccountModalProps {
   onClose: () => void;
   onEnterApp: () => void;
+  initialPlan?: "monthly" | "yearly";
 }
 
-function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
-  const [plan, setPlan] = useState<"monthly" | "yearly">("monthly");
+function CreateAccountModal({ onClose, onEnterApp, initialPlan = "monthly" }: CreateAccountModalProps) {
+  const [plan, setPlan] = useState<"monthly" | "yearly">(initialPlan);
   const [form, setForm] = useState({ company: "", email: "", password: "" });
-  const [submitted, setSubmitted] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState<Step>("form");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Step 1 — Sign up & send OTP
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     setLoading(true);
-    // Check if email is already registered
-    const registered: string[] = JSON.parse(localStorage.getItem("ag_registered_emails") || "[]");
-    if (registered.includes(form.email.toLowerCase())) {
-      setLoading(false);
-      setError("An account with this email already exists. Please log in instead.");
+
+    const { error: signupError } = await onspaceClient.auth.signUp({
+      email: form.email.trim().toLowerCase(),
+      password: form.password,
+      options: {
+        data: { username: form.company, company_name: form.company },
+      },
+    });
+
+    setLoading(false);
+
+    if (signupError) {
+      if (signupError.message.toLowerCase().includes("already registered")) {
+        setError("An account with this email already exists. Please log in instead.");
+      } else {
+        setError(signupError.message);
+      }
       return;
     }
-    await new Promise((r) => setTimeout(r, 1200));
-    // Save email to prevent duplicate signups
-    registered.push(form.email.toLowerCase());
-    localStorage.setItem("ag_registered_emails", JSON.stringify(registered));
-    localStorage.setItem("ag_current_user", JSON.stringify({ email: form.email, company: form.company, plan }));
-    setLoading(false);
-    setSubmitted(true);
+
+    setStep("verifyOtp");
   };
+
+  // Step 2 — Verify OTP, then redirect to Stripe Checkout
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    const { error: otpError } = await onspaceClient.auth.verifyOtp({
+      email: form.email.trim().toLowerCase(),
+      token: otp.trim(),
+      type: "signup",
+    });
+
+    if (otpError) {
+      setLoading(false);
+      setError("Invalid or expired code. Please check your email and try again.");
+      return;
+    }
+
+    // OTP verified — now create Stripe checkout session
+    setStep("redirecting");
+    const priceId = PRICE_IDS[plan];
+    const result = await invokeFn("create-checkout", { priceId, companyName: form.company });
+
+    if (result.error || !result.url) {
+      setLoading(false);
+      setStep("verifyOtp");
+      setError(`Payment setup failed: ${result.error || "No checkout URL returned"}`);
+      return;
+    }
+
+    // Redirect to Stripe Checkout (opens in same tab)
+    window.location.href = result.url;
+  };
+
+  // Handle returning from Stripe (checkout=success in URL)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") === "success") {
+      // Clean URL
+      window.history.replaceState({}, "", window.location.pathname);
+      onEnterApp();
+    }
+  }, [onEnterApp]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-        {/* Close */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 transition-colors text-2xl leading-none"
@@ -177,32 +261,86 @@ function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
           ×
         </button>
 
-        {submitted ? (
-          <div className="text-center py-6">
-            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl text-emerald-600">✓</span>
-            </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Account created!</h2>
-            <p className="text-slate-500 text-sm leading-relaxed mb-6">
-              Welcome, <strong>{form.company}</strong>! Your 7-day free trial is active. Let's set up your kiosk.
-            </p>
-            <button
-              onClick={onEnterApp}
-              className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-3 rounded-xl transition-colors"
-            >
-              Open Kiosk →
-            </button>
+        {/* ── Step: redirecting ── */}
+        {step === "redirecting" && (
+          <div className="text-center py-10">
+            <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-slate-700 font-medium">Redirecting to secure payment…</p>
+            <p className="text-slate-400 text-sm mt-1">You'll be taken to Stripe to enter your card details.</p>
           </div>
-        ) : (
+        )}
+
+        {/* ── Step: verify OTP ── */}
+        {step === "verifyOtp" && (
+          <>
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-slate-900 mb-1">Check your email</h2>
+              <p className="text-slate-500 text-sm">
+                We sent a {4}-digit code to <strong>{form.email}</strong>. Enter it below to confirm your account.
+              </p>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="otp">
+                  Verification code
+                </label>
+                <input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  required
+                  maxLength={8}
+                  placeholder="Enter code"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-center tracking-widest text-xl focus:outline-none focus:ring-2 focus:ring-cyan-400 text-slate-900 placeholder:text-slate-400"
+                  autoFocus
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || otp.length < 4}
+                className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl transition-colors text-sm"
+              >
+                {loading ? "Verifying…" : "Confirm & Set Up Payment →"}
+              </button>
+            </form>
+
+            <p className="text-center text-xs text-slate-400 mt-4">
+              Didn't receive it?{" "}
+              <button
+                type="button"
+                className="text-cyan-600 hover:underline"
+                onClick={() => {
+                  onspaceClient.auth.resend({ type: "signup", email: form.email.trim().toLowerCase() });
+                }}
+              >
+                Resend code
+              </button>
+            </p>
+          </>
+        )}
+
+        {/* ── Step: form ── */}
+        {step === "form" && (
           <>
             <h2 className="text-2xl font-bold text-slate-900 mb-1">Create your account</h2>
-            <p className="text-slate-500 text-sm mb-6">7-day free trial · No credit card required</p>
+            <p className="text-slate-500 text-sm mb-6">14-day free trial · Cancel anytime</p>
 
             {/* Plan picker */}
             <div className="flex gap-3 mb-6">
               {PLANS.map((p) => (
                 <button
                   key={p.id}
+                  type="button"
                   onClick={() => setPlan(p.id)}
                   className={`flex-1 relative rounded-xl border-2 p-3 text-left transition-all ${
                     plan === p.id
@@ -223,12 +361,12 @@ function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 mb-2">
+              <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 mb-3">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleSignup} className="flex flex-col gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="company">
                   Company name
@@ -253,7 +391,7 @@ function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
                   required
                   placeholder="you@company.com"
                   value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, company: form.company, email: e.target.value }))}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 text-slate-900 placeholder:text-slate-400"
                 />
               </div>
@@ -265,8 +403,8 @@ function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
                   id="password"
                   type="password"
                   required
-                  minLength={8}
-                  placeholder="Min. 8 characters"
+                  minLength={6}
+                  placeholder="Min. 6 characters"
                   value={form.password}
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 text-slate-900 placeholder:text-slate-400"
@@ -294,9 +432,35 @@ function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
   );
 }
 
+// ─── Landing Page ─────────────────────────────────────────────────────
 export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) {
   const [showModal, setShowModal] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [initialPlan, setInitialPlan] = useState<"monthly" | "yearly">("monthly");
+
+  // Check if returning from Stripe checkout
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") === "success") {
+      window.history.replaceState({}, "", window.location.pathname);
+      onEnterApp();
+    }
+  }, [onEnterApp]);
+
+  // Check if already logged in
+  useEffect(() => {
+    onspaceClient.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        onEnterApp();
+      }
+    });
+  }, [onEnterApp]);
+
+  const openSignup = (plan: "monthly" | "yearly" = "monthly") => {
+    setInitialPlan(plan);
+    setShowLogin(false);
+    setShowModal(true);
+  };
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -319,10 +483,10 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
           <nav className="hidden md:flex items-center gap-8 text-sm text-slate-600">
             <button onClick={() => scrollTo("how-it-works")} className="hover:text-slate-900 transition-colors">How it works</button>
             <button onClick={() => scrollTo("pricing")} className="hover:text-slate-900 transition-colors">Pricing</button>
-            <button onClick={() => setShowLogin(true)} className="hover:text-slate-900 transition-colors">Log In</button>
+            <button onClick={() => setShowLogin(true)} className="hover:text-slate-900 transition-colors font-medium">Log In</button>
           </nav>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => openSignup("monthly")}
             className="bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
           >
             Start Free Trial
@@ -332,17 +496,15 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
 
       {/* ── Hero ── */}
       <section className="relative pt-32 pb-20 overflow-hidden bg-slate-950">
-        {/* Background glow */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-cyan-500/10 rounded-full blur-3xl" />
           <div className="absolute bottom-0 right-0 w-[400px] h-[300px] bg-blue-600/10 rounded-full blur-3xl" />
         </div>
 
         <div className="relative max-w-6xl mx-auto px-6 text-center">
-          {/* Badge */}
           <div className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-4 py-1.5 mb-8">
             <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-            <span className="text-cyan-400 text-sm font-medium">Live attendance tracking — free 7-day trial</span>
+            <span className="text-cyan-400 text-sm font-medium">Live attendance tracking — 14-day free trial</span>
           </div>
 
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-[1.05] tracking-tight mb-6 max-w-4xl mx-auto">
@@ -359,7 +521,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => openSignup("monthly")}
               className="bg-cyan-500 hover:bg-cyan-400 text-white font-semibold px-8 py-4 rounded-xl text-base transition-all hover:shadow-lg hover:shadow-cyan-500/25 hover:-translate-y-0.5"
             >
               Start Free Trial →
@@ -372,21 +534,16 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
             </button>
           </div>
 
-          <p className="text-slate-600 text-sm mt-5">No credit card required · Setup in under 5 minutes</p>
+          <p className="text-slate-600 text-sm mt-5">No credit card required during trial · Setup in under 5 minutes</p>
         </div>
 
         {/* Dashboard screenshot */}
         <div className="relative max-w-5xl mx-auto px-6 mt-16">
           <div className="relative rounded-2xl overflow-hidden border border-slate-700/60 shadow-2xl shadow-black/60">
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent z-10 pointer-events-none" style={{ top: "60%" }} />
-            <img
-              src={dashboardPreview}
-              alt="AccessGrid dashboard"
-              className="w-full h-auto block"
-            />
+            <img src={dashboardPreview} alt="AccessGrid dashboard" className="w-full h-auto block" />
           </div>
-          {/* Floating stat cards */}
-          <div className="absolute -left-2 top-8 md:left-4 bg-white rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 hidden md:flex">
+          <div className="absolute -left-2 top-8 md:left-4 bg-white rounded-xl shadow-xl px-4 py-3 items-center gap-3 hidden md:flex">
             <div className="w-9 h-9 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600 font-bold text-sm">✓</div>
             <div>
               <div className="text-xs text-slate-500">Checked in today</div>
@@ -472,41 +629,14 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              {
-                title: "No more manual registers",
-                desc: "Eliminate paper sign-in sheets and the end-of-day scramble to total up hours.",
-                emoji: "📋",
-              },
-              {
-                title: "Works on any tablet",
-                desc: "Just open a browser, mount a tablet at reception, and you're live — no special hardware required.",
-                emoji: "📱",
-              },
-              {
-                title: "Export in seconds",
-                desc: "Need payroll data? Download a CSV of the full attendance log filtered by date, department, or person.",
-                emoji: "📊",
-              },
-              {
-                title: "Syncs across devices",
-                desc: "Run multiple kiosks at different entrances. All data flows to one real-time dashboard.",
-                emoji: "🔄",
-              },
-              {
-                title: "QR codes in bulk",
-                desc: "Print and distribute QR badges for your entire team in minutes — individually or as a ZIP download.",
-                emoji: "🖨️",
-              },
-              {
-                title: "PIN-protected admin",
-                desc: "Your kiosk stays in staff mode. Only managers with the PIN can access attendance data and settings.",
-                emoji: "🔒",
-              },
+              { title: "No more manual registers", desc: "Eliminate paper sign-in sheets and the end-of-day scramble to total up hours.", emoji: "📋" },
+              { title: "Works on any tablet", desc: "Just open a browser, mount a tablet at reception, and you're live — no special hardware required.", emoji: "📱" },
+              { title: "Export in seconds", desc: "Need payroll data? Download a CSV of the full attendance log filtered by date, department, or person.", emoji: "📊" },
+              { title: "Syncs across devices", desc: "Run multiple kiosks at different entrances. All data flows to one real-time dashboard.", emoji: "🔄" },
+              { title: "QR codes in bulk", desc: "Print and distribute QR badges for your entire team in minutes — individually or as a ZIP download.", emoji: "🖨️" },
+              { title: "PIN-protected admin", desc: "Your kiosk stays in staff mode. Only managers with the PIN can access attendance data and settings.", emoji: "🔒" },
             ].map((b) => (
-              <div
-                key={b.title}
-                className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-slate-600 transition-all"
-              >
+              <div key={b.title} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-slate-600 transition-all">
                 <div className="text-3xl mb-4">{b.emoji}</div>
                 <h3 className="text-white font-bold text-base mb-2">{b.title}</h3>
                 <p className="text-slate-400 text-sm leading-relaxed">{b.desc}</p>
@@ -521,7 +651,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
         <div className="max-w-4xl mx-auto px-6">
           <div className="text-center mb-14">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">Simple, honest pricing</h2>
-            <p className="text-slate-500 text-lg">One plan. Everything included. No surprises.</p>
+            <p className="text-slate-500 text-lg">One plan. Everything included. 14-day free trial.</p>
           </div>
 
           <div className="flex flex-col md:flex-row gap-6 justify-center items-stretch">
@@ -534,7 +664,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
               </div>
               <div className="text-slate-500 text-sm mb-6">Up to 20 staff members</div>
               <ul className="space-y-3 mb-8 text-sm text-slate-600">
-                {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "7-day free trial"].map((f) => (
+                {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "14-day free trial"].map((f) => (
                   <li key={f} className="flex items-start gap-2">
                     <span className="text-emerald-500 mt-0.5 flex-shrink-0">✓</span>
                     {f}
@@ -542,7 +672,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
                 ))}
               </ul>
               <button
-                onClick={() => setShowModal(true)}
+                onClick={() => openSignup("monthly")}
                 className="w-full border-2 border-cyan-500 text-cyan-600 hover:bg-cyan-50 font-semibold py-3 rounded-xl transition-colors text-sm"
               >
                 Start free trial
@@ -561,7 +691,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
               </div>
               <div className="text-slate-500 text-sm mb-6">Up to 20 staff · only £20/month</div>
               <ul className="space-y-3 mb-8 text-sm text-slate-600">
-                {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "7-day free trial"].map((f) => (
+                {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "14-day free trial"].map((f) => (
                   <li key={f} className="flex items-start gap-2">
                     <span className="text-emerald-500 mt-0.5 flex-shrink-0">✓</span>
                     {f}
@@ -569,7 +699,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
                 ))}
               </ul>
               <button
-                onClick={() => setShowModal(true)}
+                onClick={() => openSignup("yearly")}
                 className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
               >
                 Start free trial
@@ -592,10 +722,10 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
               Ready to ditch the clipboard?
             </h2>
             <p className="text-slate-400 text-lg mb-10">
-              Join teams who've already switched to QR-based attendance. 7-day free trial. No card needed.
+              Join teams who've already switched to QR-based attendance. 14-day free trial. No card needed upfront.
             </p>
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => openSignup("monthly")}
               className="bg-cyan-500 hover:bg-cyan-400 text-white font-bold px-10 py-4 rounded-xl text-base transition-all hover:shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-0.5"
             >
               Create Your Account →
@@ -631,8 +761,20 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
         </div>
       </footer>
 
-      {showModal && <CreateAccountModal onClose={() => setShowModal(false)} onEnterApp={onEnterApp} />}
-      {showLogin && <LoginModal onClose={() => setShowLogin(false)} onEnterApp={onEnterApp} />}
+      {showModal && (
+        <CreateAccountModal
+          onClose={() => setShowModal(false)}
+          onEnterApp={onEnterApp}
+          initialPlan={initialPlan}
+        />
+      )}
+      {showLogin && (
+        <LoginModal
+          onClose={() => setShowLogin(false)}
+          onEnterApp={onEnterApp}
+          onSwitchToSignup={() => openSignup("monthly")}
+        />
+      )}
     </div>
   );
 }
