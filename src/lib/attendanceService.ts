@@ -77,21 +77,38 @@ function rowToRecord(
   };
 }
 
+// Stable company UUID — used to satisfy the NOT NULL company_id column
+const COMPANY_UUID = "00000000-0000-0000-0000-000000000001";
+
 // ── AttendanceRecord → DB row (only original columns) ───────────────
 function recordToRow(r: AttendanceRecord) {
   const toISO = (timeStr: string | undefined, dateStr: string): string | null => {
     if (!timeStr) return null;
-    const dt = new Date(`${dateStr} ${timeStr}`);
+    // Build a local-time date string to avoid UTC offset issues
+    const dt = new Date(`${dateStr}T${to24h(timeStr)}`);
     return isNaN(dt.getTime()) ? null : dt.toISOString();
   };
 
   return {
     id: r.id,
+    company_id: COMPANY_UUID,
     staff_id: r.staffId,
     check_in: toISO(r.checkInTime, r.date),
     check_out: r.checkOutTime ? toISO(r.checkOutTime, r.date) : null,
-    // company_id: null  — omit to avoid uuid type issues
   };
+}
+
+/** Convert "HH:MM AM/PM" or "HH:MM" to 24-hour "HH:MM:00" */
+function to24h(timeStr: string): string {
+  const isPM = /PM/i.test(timeStr);
+  const isAM = /AM/i.test(timeStr);
+  const clean = timeStr.replace(/\s*(AM|PM)\s*/i, "");
+  const [hStr, mStr] = clean.split(":");
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isPM && h !== 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
 }
 
 // ── Public API ───────────────────────────────────────────────────────
@@ -112,9 +129,19 @@ export async function fetchAttendance(): Promise<AttendanceRecord[]> {
     return getLocal();
   }
 
-  const records = (data ?? []).map((row) => rowToRecord(row as Record<string, unknown>, staffMap));
-  saveLocal(records);
-  return records;
+  const remoteRecords = (data ?? []).map((row) => rowToRecord(row as Record<string, unknown>, staffMap));
+
+  // If Supabase returned rows, use them. Otherwise keep localStorage (prevents overwrite on failed upserts).
+  if (remoteRecords.length > 0) {
+    saveLocal(remoteRecords);
+    return remoteRecords;
+  }
+
+  // Supabase returned 0 rows — could be legitimately empty OR upsert failures.
+  // Merge: prefer local records so check-ins aren't lost.
+  const local = getLocal();
+  console.log("[attendanceService] Supabase returned 0 rows, using localStorage fallback (", local.length, "records)");
+  return local;
 }
 
 /** Upsert (insert or update) a single attendance record to Supabase + localStorage */
@@ -152,6 +179,7 @@ export async function cloudCheckIn(
   department: string
 ): Promise<AttendanceRecord | null> {
   const today = getLocalToday();
+  // Use UTC midnight boundaries to cover the full local day regardless of timezone
   const todayStart = new Date(today + "T00:00:00").toISOString();
   const todayEnd = new Date(today + "T23:59:59").toISOString();
 

@@ -24,7 +24,10 @@ export default function DashboardTab() {
   const [todayLabel, setTodayLabel] = useState(() => getTodayLabel());
   const [lastRefreshed, setLastRefreshed] = useState(() => new Date());
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Use local date (not UTC) to match how attendance records store their date
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 
   const refresh = useCallback(async () => {
     const [remoteStaff, remoteAttendance] = await Promise.all([
