@@ -8,6 +8,7 @@ import type { AppMode } from "@/types";
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
+  const [skipAutoLogin, setSkipAutoLogin] = useState(false);
   const [mode, setMode] = useState<AppMode>("kiosk");
 
   // On mount: check for active session (e.g. returning from Stripe checkout)
@@ -20,18 +21,18 @@ export default function App() {
   }, []);
 
   // ALL hooks must be declared before any conditional returns
-  const enterApp = useCallback(() => setShowLanding(false), []);
+  const enterApp = useCallback(() => { setShowLanding(false); setSkipAutoLogin(false); }, []);
   const handleOpenPin = useCallback(() => setMode("pin"), []);
   const handlePinSuccess = useCallback(() => setMode("admin"), []);
   const handlePinCancel = useCallback(() => setMode("kiosk"), []);
-  const handleGoHome = useCallback(() => setShowLanding(true), []);
+  const handleGoHome = useCallback(() => { setSkipAutoLogin(true); setShowLanding(true); }, []);
   const handleExitAdmin = useCallback(() => setMode("kiosk"), []);
   const handleLockAdmin = useCallback(() => setMode("locked"), []);
   const handleUnlockAdmin = useCallback(() => setMode("admin"), []);
   const handleUnlockCancel = useCallback(() => setMode("kiosk"), []);
 
   if (showLanding) {
-    return <LandingPage onEnterApp={enterApp} />;
+    return <LandingPage onEnterApp={enterApp} skipAutoLogin={skipAutoLogin} />;
   }
 
   return (

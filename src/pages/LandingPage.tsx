@@ -433,7 +433,7 @@ function CreateAccountModal({ onClose, onEnterApp, initialPlan = "monthly" }: Cr
 }
 
 // ─── Landing Page ─────────────────────────────────────────────────────
-export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) {
+export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp: () => void; skipAutoLogin?: boolean }) {
   const [showModal, setShowModal] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [initialPlan, setInitialPlan] = useState<"monthly" | "yearly">("monthly");
@@ -447,14 +447,15 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
     }
   }, [onEnterApp]);
 
-  // Check if already logged in
+  // If returning from Stripe, or already has a session (and not manually navigating home), auto-enter
   useEffect(() => {
+    if (skipAutoLogin) return;
     onspaceClient.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         onEnterApp();
       }
     });
-  }, [onEnterApp]);
+  }, [onEnterApp, skipAutoLogin]);
 
   const openSignup = (plan: "monthly" | "yearly" = "monthly") => {
     setInitialPlan(plan);
@@ -484,6 +485,9 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
             <button onClick={() => scrollTo("how-it-works")} className="hover:text-slate-900 transition-colors">How it works</button>
             <button onClick={() => scrollTo("pricing")} className="hover:text-slate-900 transition-colors">Pricing</button>
             <button onClick={() => setShowLogin(true)} className="hover:text-slate-900 transition-colors font-medium">Log In</button>
+            {skipAutoLogin && (
+              <button onClick={onEnterApp} className="text-cyan-600 hover:text-cyan-700 transition-colors font-semibold">↩ Back to Kiosk</button>
+            )}
           </nav>
           <button
             onClick={() => openSignup("monthly")}
@@ -662,7 +666,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
                 <span className="text-4xl font-bold text-slate-900">£25</span>
                 <span className="text-slate-500 pb-1">/month</span>
               </div>
-              <div className="text-slate-500 text-sm mb-6">Up to 20 staff members</div>
+              <div className="text-slate-500 text-sm mb-6">Per company · up to 20 staff</div>
               <ul className="space-y-3 mb-8 text-sm text-slate-600">
                 {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "14-day free trial"].map((f) => (
                   <li key={f} className="flex items-start gap-2">
@@ -689,7 +693,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
                 <span className="text-4xl font-bold text-slate-900">£240</span>
                 <span className="text-slate-500 pb-1">/year</span>
               </div>
-              <div className="text-slate-500 text-sm mb-6">Up to 20 staff · only £20/month</div>
+              <div className="text-slate-500 text-sm mb-6">Per company · only £20/month · save £60</div>
               <ul className="space-y-3 mb-8 text-sm text-slate-600">
                 {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "14-day free trial"].map((f) => (
                   <li key={f} className="flex items-start gap-2">
