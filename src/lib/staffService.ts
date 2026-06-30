@@ -103,16 +103,8 @@ export async function deleteStaff(id: string): Promise<void> {
   saveLocalStaff(local.filter((s) => s.id !== id));
 }
 
-/** Sync remote staff list into localStorage (merges with other-company staff) */
+/** Sync remote staff list into localStorage (replaces all — single tenant) */
 function syncRemoteToLocal(remoteStaff: StaffMember[]) {
-  const companyId = getCompanyId();
-  // Keep staff from OTHER companies that are already in localStorage
-  let all: StaffMember[] = [];
-  try {
-    all = JSON.parse(localStorage.getItem("kiosk_staff") ?? "[]");
-  } catch {
-    all = [];
-  }
-  const otherCompany = all.filter((s) => s.companyId && s.companyId !== companyId);
-  saveLocalStaff([...otherCompany, ...remoteStaff]);
+  // Single-tenant: remote is the source of truth — replace local cache entirely
+  saveLocalStaff(remoteStaff);
 }

@@ -1,9 +1,9 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   RefreshCw, Users, Clock, Building2, Download, ChevronDown,
-  ChevronLeft, ChevronRight, CalendarDays, CalendarRange,
+  ChevronLeft, ChevronRight, CalendarDays, CalendarRange, Cloud,
 } from "lucide-react";
-import { getAttendance, getAttendanceByDate } from "@/lib/storage";
+import { fetchAttendance } from "@/lib/attendanceService";
 import type { AttendanceRecord } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,19 @@ type ViewMode = "single" | "range";
 
 export default function AttendanceTab() {
   const todayStr = toLocalDateStr(new Date());
+
+  // All records loaded from Supabase
+  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadRecords = useCallback(async () => {
+    setLoading(true);
+    const remote = await fetchAttendance();
+    setAllRecords(remote);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadRecords(); }, [loadRecords]);
 
   // ── View mode ──────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<ViewMode>("single");
@@ -36,22 +49,12 @@ export default function AttendanceTab() {
   const [deptFilter, setDeptFilter] = useState<string>("All");
 
   // ── Derived records ────────────────────────────────────────────────
-  const records = useMemo<AttendanceRecord[]>(() => {
+  const activeRecords = useMemo<AttendanceRecord[]>(() => {
     if (viewMode === "single") {
-      return getAttendanceByDate(selectedDate);
+      return allRecords.filter((r) => r.date === selectedDate);
     }
-    return getAttendance().filter((r) => r.date >= rangeFrom && r.date <= rangeTo);
-  }, [viewMode, selectedDate, rangeFrom, rangeTo]);
-
-  // Force re-compute when user clicks refresh
-  const [refreshKey, setRefreshKey] = useState(0);
-  const refreshedRecords = useMemo<AttendanceRecord[]>(() => {
-    void refreshKey;
-    if (viewMode === "single") return getAttendanceByDate(selectedDate);
-    return getAttendance().filter((r) => r.date >= rangeFrom && r.date <= rangeTo);
-  }, [viewMode, selectedDate, rangeFrom, rangeTo, refreshKey]);
-
-  const activeRecords = refreshedRecords;
+    return allRecords.filter((r) => r.date >= rangeFrom && r.date <= rangeTo);
+  }, [allRecords, viewMode, selectedDate, rangeFrom, rangeTo]);
 
   // ── Helpers ────────────────────────────────────────────────────────
   function loadDate(dateStr: string) {
@@ -110,7 +113,6 @@ export default function AttendanceTab() {
     const rows = activeRecords.map((r) =>
       `"${r.staffName}","${r.department}","${r.date}","${r.checkInTime}","${r.checkOutTime ?? "Not checked out"}","${r.shiftDuration ?? "In progress"}"`
     );
-    // BOM + CSV for correct Excel encoding
     const csv = "\uFEFF" + [header, ...rows].join("\r\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -172,6 +174,11 @@ export default function AttendanceTab() {
               <span className="text-emerald-400/70 text-sm">records</span>
             </div>
 
+            {/* Cloud sync indicator */}
+            <div className="flex items-center gap-1.5 text-emerald-400 text-xs">
+              <Cloud size={12} /> Synced to cloud
+            </div>
+
             {/* Department filter */}
             <div className="relative">
               <select
@@ -196,10 +203,10 @@ export default function AttendanceTab() {
             </button>
 
             <button
-              onClick={() => setRefreshKey((k) => k + 1)}
+              onClick={loadRecords}
               className="w-10 h-10 rounded-xl bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-400 hover:text-white transition"
             >
-              <RefreshCw size={16} />
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
             </button>
           </div>
         </div>
@@ -359,7 +366,12 @@ export default function AttendanceTab() {
       )}
 
       {/* ── Records list ── */}
-      {activeRecords.length === 0 ? (
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
+          <RefreshCw size={36} className="opacity-40 animate-spin" />
+          <p className="text-lg font-medium">Loading from cloud…</p>
+        </div>
+      ) : activeRecords.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
           <Clock size={40} className="opacity-40" />
           <p className="text-lg font-medium">

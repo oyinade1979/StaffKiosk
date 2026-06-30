@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { Users, UserCheck, UserMinus, LogIn, LogOut, Activity, TrendingUp, Clock } from "lucide-react";
-import { getStaff, getTodayAttendance, getAttendance } from "@/lib/storage";
+import { getStaff } from "@/lib/storage";
+import { fetchAttendance } from "@/lib/attendanceService";
+import { fetchStaff } from "@/lib/staffService";
+import type { AttendanceRecord } from "@/types";
 import { cn } from "@/lib/utils";
 
 interface Event {
@@ -16,19 +19,27 @@ function getTodayLabel() {
 }
 
 export default function DashboardTab() {
-  const [staff, setStaff] = useState(() => getStaff());
-  const [todayRecords, setTodayRecords] = useState(() => getTodayAttendance());
-  const [allRecords, setAllRecords] = useState(() => getAttendance());
+  const [staffCount, setStaffCount] = useState(() => getStaff().length);
+  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([]);
   const [todayLabel, setTodayLabel] = useState(() => getTodayLabel());
   const [lastRefreshed, setLastRefreshed] = useState(() => new Date());
 
-  const refresh = useCallback(() => {
-    setStaff(getStaff());
-    setTodayRecords(getTodayAttendance());
-    setAllRecords(getAttendance());
+  const today = new Date().toISOString().slice(0, 10);
+
+  const refresh = useCallback(async () => {
+    const [remoteStaff, remoteAttendance] = await Promise.all([
+      fetchStaff(),
+      fetchAttendance(),
+    ]);
+    setStaffCount(remoteStaff.length);
+    setAllRecords(remoteAttendance);
     setTodayLabel(getTodayLabel());
     setLastRefreshed(new Date());
   }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -36,7 +47,8 @@ export default function DashboardTab() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  const totalStaff = staff.length;
+  const todayRecords = allRecords.filter((r) => r.date === today);
+  const totalStaff = staffCount;
   const todayCheckIns = todayRecords.length;
   const currentlyIn = todayRecords.filter((r) => !r.checkOutTime).length;
   const currentlyOut = todayRecords.filter((r) => !!r.checkOutTime).length;
@@ -70,7 +82,7 @@ export default function DashboardTab() {
   });
   const recentEvents = events.slice(0, 5);
 
-  const isToday = (date: string) => date === new Date().toISOString().slice(0, 10);
+  const isToday = (date: string) => date === today;
 
   const stats = [
     {

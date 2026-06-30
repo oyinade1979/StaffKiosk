@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { recordCheckIn, type ScanAction } from "@/lib/storage";
+import { getStaff } from "@/lib/storage";
+import { cloudCheckIn, cloudCheckOut } from "@/lib/attendanceService";
 import { playCheckInSound, playCheckOutSound, playErrorSound, playWarningSound } from "@/lib/audio";
 import type { AttendanceRecord } from "@/types";
 
@@ -26,19 +27,59 @@ export default function QRScanner() {
       .start(
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 260, height: 260 } },
-        (decodedText) => {
+        async (decodedText) => {
           if (cooldownRef.current) return;
           cooldownRef.current = true;
 
-          const outcome = recordCheckIn(decodedText);
-          if (outcome) {
-            setResult({ state: outcome.action as ScanState, record: outcome.record });
-            if (outcome.action === "checkin") playCheckInSound();
-            else if (outcome.action === "checkout") playCheckOutSound();
-            else playWarningSound(); // already_out
-          } else {
+          // Look up staff by id or qrCode
+          const allStaff = getStaff();
+          const staff = allStaff.find((s) => s.id === decodedText || s.qrCode === decodedText);
+
+          if (!staff) {
             setResult({ state: "unknown" });
             playErrorSound();
+            setTimeout(() => { setResult({ state: "idle" }); cooldownRef.current = false; }, 3000);
+            return;
+          }
+
+          const today = new Date().toISOString().slice(0, 10);
+
+          // Check if staff already has a record today in local cache
+          let localRecord: AttendanceRecord | undefined;
+          try {
+            const localAll: AttendanceRecord[] = JSON.parse(localStorage.getItem("kiosk_attendance") ?? "[]");
+            localRecord = localAll.find((r) => r.staffId === staff.id && r.date === today);
+          } catch { /* ignore */ }
+
+          if (!localRecord) {
+            // First scan today — check in
+            const record = await cloudCheckIn(staff.id, staff.name, staff.department);
+            if (record) {
+              setResult({ state: "checkin", record });
+              playCheckInSound();
+            } else {
+              setResult({ state: "unknown" });
+              playErrorSound();
+            }
+          } else if (!localRecord.checkOutTime) {
+            // Already checked in but not out — check out
+            const outcome = await cloudCheckOut(staff.id);
+            if (outcome) {
+              if (outcome.alreadyOut) {
+                setResult({ state: "already_out", record: outcome.record });
+                playWarningSound();
+              } else {
+                setResult({ state: "checkout", record: outcome.record });
+                playCheckOutSound();
+              }
+            } else {
+              setResult({ state: "unknown" });
+              playErrorSound();
+            }
+          } else {
+            // Already checked out
+            setResult({ state: "already_out", record: localRecord });
+            playWarningSound();
           }
 
           setTimeout(() => {
