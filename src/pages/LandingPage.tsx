@@ -165,7 +165,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans" onKeyDown={(e) => e.key === "Escape" && onClose()}>
+    <div className="min-h-screen bg-white text-slate-900 font-sans">
       {/* ── Navbar ── */}
       <header className="fixed top-0 inset-x-0 z-40 bg-white/80 backdrop-blur border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
