@@ -43,15 +43,15 @@ export default function QRScanner() {
 
           console.log("[QRScanner] scanned:", decodedText);
 
-          // If cache is empty, try reloading from Supabase first
-          if (staffCacheRef.current.length === 0) {
-            staffCacheRef.current = await fetchStaff();
-          }
+          // Always reload from Supabase to guarantee fresh staff list
+          staffCacheRef.current = await fetchStaff();
 
           // Look up staff by id or qrCode
           const allStaff = staffCacheRef.current;
-          console.log("[QRScanner] looking in", allStaff.length, "staff records");
+          console.log("[QRScanner] looking in", allStaff.length, "staff records",
+            allStaff.map(s => ({ id: s.id, qrCode: s.qrCode })));
           const staff = allStaff.find((s) => s.id === decodedText || s.qrCode === decodedText);
+          console.log("[QRScanner] matched staff:", staff?.name ?? "NONE");
 
           if (!staff) {
             setResult({ state: "unknown" });

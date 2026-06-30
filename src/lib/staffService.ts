@@ -105,6 +105,9 @@ export async function deleteStaff(id: string): Promise<void> {
 
 /** Sync remote staff list into localStorage (replaces all — single tenant) */
 function syncRemoteToLocal(remoteStaff: StaffMember[]) {
-  // Single-tenant: remote is the source of truth — replace local cache entirely
-  saveLocalStaff(remoteStaff);
+  // Normalise companyId on every remote record to the local companyId so
+  // storage.getStaff()'s companyId filter never hides cloud-sourced records.
+  const localCompanyId = getCompanyId();
+  const normalised = remoteStaff.map((s) => ({ ...s, companyId: localCompanyId }));
+  saveLocalStaff(normalised);
 }
