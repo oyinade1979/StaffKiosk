@@ -157,8 +157,8 @@ interface PlanType {
 }
 
 const PLANS: PlanType[] = [
-  { id: "monthly", label: "Monthly", price: "£25", sub: "/month · up to 20 staff" },
-  { id: "yearly", label: "Yearly", price: "£240", sub: "/year · save £60", badge: "Best Value" },
+  { id: "monthly", label: "Monthly", price: "£25", sub: "/month · per company" },
+  { id: "yearly", label: "Yearly", price: "£240", sub: "/year · per company · save £60", badge: "Best Value" },
 ];
 
 // ─── Create Account Modal ─────────────────────────────────────────────
