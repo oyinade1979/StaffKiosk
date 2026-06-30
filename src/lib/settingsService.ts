@@ -29,7 +29,6 @@
 
 import { supabase } from "@/lib/supabase";
 import {
-  getPin, setPin,
   getCompanyName, setCompanyName,
   getWelcomeMessage, setWelcomeMessage,
   getAnnouncement, setAnnouncement,
@@ -46,7 +45,6 @@ const SETTINGS_ROW_ID = "00000000-0000-0000-0000-000000000001";
 export interface AppSettings {
   companyName: string;
   welcomeMessage: string;
-  pin: string;
   announcement: string;
   announcementEnabled: boolean;
   announcementInterval: number;
@@ -57,7 +55,6 @@ function rowToSettings(row: Record<string, unknown>): AppSettings {
   return {
     companyName: (row.company_name as string | null) ?? "AccessGrid",
     welcomeMessage: (row.welcome_message as string | null) ?? "Scan your QR badge to check in/check out",
-    pin: (row.kiosk_admin_pin as string | null) ?? "1234",
     announcement: (row.announcement as string | null) ?? "",
     announcementEnabled: (row.announcement_enabled as boolean | null) ?? false,
     announcementInterval: (row.announcement_interval as number | null) ?? 2,
@@ -71,10 +68,9 @@ const COMPANY_UUID = "00000000-0000-0000-0000-000000000001";
 function settingsToRow(s: AppSettings) {
   return {
     id: SETTINGS_ROW_ID,
-    company_id: COMPANY_UUID,        // required NOT NULL column
+    company_id: COMPANY_UUID,
     company_name: s.companyName,
     welcome_message: s.welcomeMessage,
-    kiosk_admin_pin: s.pin,
     announcement: s.announcement,
     announcement_enabled: s.announcementEnabled,
     announcement_interval: s.announcementInterval,
@@ -86,7 +82,6 @@ function getLocalSettings(): AppSettings {
   return {
     companyName: getCompanyName(),
     welcomeMessage: getWelcomeMessage(),
-    pin: getPin(),
     announcement: getAnnouncement(),
     announcementEnabled: getAnnouncementEnabled(),
     announcementInterval: getAnnouncementInterval(),
@@ -97,7 +92,6 @@ function getLocalSettings(): AppSettings {
 function applyToLocal(s: AppSettings): void {
   setCompanyName(s.companyName);
   setWelcomeMessage(s.welcomeMessage);
-  setPin(s.pin);
   setAnnouncement(s.announcement);
   setAnnouncementEnabled(s.announcementEnabled);
   setAnnouncementInterval(s.announcementInterval);
