@@ -1,22 +1,34 @@
 /**
- * Supabase attendance service — async CRUD for check-in/check-out records.
+ * Supabase attendance service — syncs check-in/check-out records.
  *
- * Run this SQL once in your Supabase SQL Editor:
- * ─────────────────────────────────────────────────────────────────────
- * create table if not exists public.attendance (
- *   id            text primary key,
- *   staff_id      text not null,
- *   staff_name    text not null,
- *   department    text not null,
- *   check_in_time text not null,
- *   check_out_time text,
- *   shift_duration text,
- *   date          text not null,
- *   created_at    timestamptz not null default now()
- * );
- * alter table public.attendance enable row level security;
- * create policy "Allow all" on public.attendance for all using (true) with check (true);
- * ─────────────────────────────────────────────────────────────────────
+ * Matches the existing Supabase attendance table schema:
+ *   id            uuid  primary key
+ *   company_id    uuid
+ *   staff_id      uuid
+ *   check_in      timestamptz
+ *   check_out     timestamptz (nullable)
+ *   created_at    timestamptz
+ *   staff_name    text  (add via SQL below if missing)
+ *   department    text  (add via SQL below if missing)
+ *   date          text  (add via SQL below if missing)
+ *   shift_duration text (add via SQL below if missing)
+ *
+ * Run once in Supabase SQL Editor to add missing columns:
+ * ─────────────────────────────────────────────────────────
+ * ALTER TABLE public.attendance
+ *   ADD COLUMN IF NOT EXISTS staff_name text,
+ *   ADD COLUMN IF NOT EXISTS department text,
+ *   ADD COLUMN IF NOT EXISTS date text,
+ *   ADD COLUMN IF NOT EXISTS shift_duration text;
+ * ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+ * DO $$ BEGIN
+ *   IF NOT EXISTS (
+ *     SELECT 1 FROM pg_policies WHERE tablename='attendance' AND policyname='Allow all'
+ *   ) THEN
+ *     CREATE POLICY "Allow all" ON public.attendance FOR ALL USING (true) WITH CHECK (true);
+ *   END IF;
+ * END $$;
+ * ─────────────────────────────────────────────────────────
  */
 
 import { supabase } from "@/lib/supabase";
@@ -25,30 +37,62 @@ import type { AttendanceRecord } from "@/types";
 const TABLE = "attendance";
 const LOCAL_KEY = "kiosk_attendance";
 
-// ── Row mapping ──────────────────────────────────────────────────────
+// ── Row → AttendanceRecord ───────────────────────────────────────────
 function rowToRecord(row: Record<string, unknown>): AttendanceRecord {
+  // check_in and check_out are ISO timestamp strings from Supabase
+  const checkInISO = row.check_in as string | null;
+  const checkOutISO = row.check_out as string | null;
+
+  // Derive display time (HH:MM AM/PM) from ISO timestamp
+  const toTimeStr = (iso: string | null) => {
+    if (!iso) return undefined;
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  // Derive date string (YYYY-MM-DD) from check_in timestamp
+  const toDateStr = (iso: string | null) => {
+    if (!iso) return new Date().toISOString().slice(0, 10);
+    return new Date(iso).toLocaleDateString("en-CA"); // YYYY-MM-DD
+  };
+
+  const checkInTime = (row.check_in_time as string | null) ?? toTimeStr(checkInISO) ?? "";
+  const checkOutTime = (row.check_out_time as string | null) ?? toTimeStr(checkOutISO ?? null) ?? undefined;
+  const date = (row.date as string | null) ?? toDateStr(checkInISO);
+
   return {
     id: row.id as string,
     staffId: row.staff_id as string,
-    staffName: row.staff_name as string,
-    department: row.department as string,
-    checkInTime: row.check_in_time as string,
-    checkOutTime: (row.check_out_time as string | null) ?? undefined,
+    staffName: (row.staff_name as string | null) ?? "Unknown",
+    department: (row.department as string | null) ?? "",
+    checkInTime,
+    checkOutTime,
     shiftDuration: (row.shift_duration as string | null) ?? undefined,
-    date: row.date as string,
+    date,
   };
 }
 
+// ── AttendanceRecord → DB row ────────────────────────────────────────
 function recordToRow(r: AttendanceRecord) {
+  // Convert HH:MM AM/PM back to ISO timestamp using the record date
+  const toISO = (timeStr: string | undefined, dateStr: string): string | null => {
+    if (!timeStr) return null;
+    // Combine date + time string into a Date and get ISO
+    const dt = new Date(`${dateStr} ${timeStr}`);
+    return isNaN(dt.getTime()) ? null : dt.toISOString();
+  };
+
   return {
     id: r.id,
     staff_id: r.staffId,
     staff_name: r.staffName,
     department: r.department,
+    date: r.date,
+    check_in: toISO(r.checkInTime, r.date),
+    check_out: r.checkOutTime ? toISO(r.checkOutTime, r.date) : null,
+    shift_duration: r.shiftDuration ?? null,
+    // Store display strings too for easy retrieval
     check_in_time: r.checkInTime,
     check_out_time: r.checkOutTime ?? null,
-    shift_duration: r.shiftDuration ?? null,
-    date: r.date,
   };
 }
 
@@ -72,7 +116,7 @@ export async function fetchAttendance(): Promise<AttendanceRecord[]> {
   const { data, error } = await supabase
     .from(TABLE)
     .select("*")
-    .order("date", { ascending: false });
+    .order("check_in", { ascending: false });
 
   if (error) {
     console.warn("[attendanceService] Supabase fetch error — falling back to localStorage:", error.message);
@@ -84,31 +128,11 @@ export async function fetchAttendance(): Promise<AttendanceRecord[]> {
   return records;
 }
 
-/** Fetch attendance records for a specific date */
-export async function fetchAttendanceByDate(date: string): Promise<AttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select("*")
-    .eq("date", date)
-    .order("check_in_time", { ascending: true });
-
-  if (error) {
-    console.warn("[attendanceService] Supabase fetch by date error:", error.message);
-    return getLocal().filter((r) => r.date === date);
-  }
-
-  return (data ?? []).map(rowToRecord);
-}
-
-/** Fetch today's attendance */
-export async function fetchTodayAttendance(): Promise<AttendanceRecord[]> {
-  const today = new Date().toISOString().slice(0, 10);
-  return fetchAttendanceByDate(today);
-}
-
 /** Upsert (insert or update) a single attendance record */
 export async function upsertAttendance(record: AttendanceRecord): Promise<void> {
-  const { error } = await supabase.from(TABLE).upsert(recordToRow(record));
+  const row = recordToRow(record);
+  console.log("[attendanceService] upsert row:", row);
+  const { error } = await supabase.from(TABLE).upsert(row);
   if (error) {
     console.warn("[attendanceService] Supabase upsert error:", error.message);
   }
@@ -116,14 +140,14 @@ export async function upsertAttendance(record: AttendanceRecord): Promise<void> 
   const local = getLocal();
   const idx = local.findIndex((r) => r.id === record.id);
   if (idx === -1) {
-    saveLocal([...local, record]);
+    saveLocal([record, ...local]);
   } else {
     local[idx] = record;
     saveLocal(local);
   }
 }
 
-/** Check in a staff member — creates attendance record in Supabase + localStorage */
+/** Check in a staff member — creates attendance record */
 export async function cloudCheckIn(
   staffId: string,
   staffName: string,
@@ -131,7 +155,7 @@ export async function cloudCheckIn(
 ): Promise<AttendanceRecord | null> {
   const today = new Date().toISOString().slice(0, 10);
 
-  // Check if already checked in today (look in Supabase)
+  // Check if already checked in today (Supabase)
   const { data: existing, error: fetchErr } = await supabase
     .from(TABLE)
     .select("*")
@@ -144,16 +168,18 @@ export async function cloudCheckIn(
   }
 
   if (existing) {
-    // Already has a record today — return it
     return rowToRecord(existing as Record<string, unknown>);
   }
 
+  const now = new Date();
+  const checkInTime = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
   const record: AttendanceRecord = {
-    id: `ATT-${Date.now()}`,
+    id: crypto.randomUUID(),
     staffId,
     staffName,
     department,
-    checkInTime: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    checkInTime,
     date: today,
   };
 
@@ -167,7 +193,7 @@ export async function cloudCheckOut(
 ): Promise<{ record: AttendanceRecord; alreadyOut: boolean } | null> {
   const today = new Date().toISOString().slice(0, 10);
 
-  // Find today's record
+  // Find today's check-in record
   const { data: existing, error } = await supabase
     .from(TABLE)
     .select("*")
@@ -201,7 +227,7 @@ export async function cloudCheckOut(
   return { record: updated, alreadyOut: false };
 }
 
-// ── Helper ───────────────────────────────────────────────────────────
+// ── Duration helper ──────────────────────────────────────────────────
 function formatDuration(inTime: string, outTime: string): string {
   const parse = (t: string) => {
     const clean = t.replace(/\s*(AM|PM)\s*/i, "");

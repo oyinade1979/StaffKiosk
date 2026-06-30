@@ -44,7 +44,7 @@ export function saveStaff(staff: StaffMember[]): void {
 
 export function addStaffMember(member: Omit<StaffMember, "id" | "qrCode" | "createdAt">): StaffMember {  // member includes email
   const staff = getStaff();
-  const id = `STAFF-${Date.now()}`;
+  const id = crypto.randomUUID();
   const newMember: StaffMember = {
     ...member,
     id,
