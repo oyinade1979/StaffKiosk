@@ -2,11 +2,17 @@ import { useState, useCallback, useEffect } from "react";
 import KioskMode from "@/components/kiosk/KioskMode";
 import PinPad from "@/components/admin/PinPad";
 import AdminMode from "@/components/admin/AdminMode";
+import LandingPage from "@/pages/LandingPage";
 import { saveSettings } from "@/lib/settingsService";
 import type { AppMode } from "@/types";
 
 export default function App() {
+  const [showLanding, setShowLanding] = useState(true);
   const [mode, setMode] = useState<AppMode>("kiosk");
+
+  if (showLanding) {
+    return <LandingPage onEnterApp={() => setShowLanding(false)} />;
+  }
 
   // On first load, push current local settings to Supabase so all tables get seeded
   useEffect(() => {
