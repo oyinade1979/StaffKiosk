@@ -231,7 +231,7 @@ export default function QRCodesTab() {
                 <div className="bg-white p-4 rounded-2xl shadow-xl">
                   <QRCodeCanvas
                     id="qr-preview"
-                    value={selected.qrCode}
+                    value={selected.id}
                     size={180}
                     level="H"
                     includeMargin={false}
@@ -247,7 +247,7 @@ export default function QRCodesTab() {
                       <p className="text-slate-500 text-xs font-mono">{selected.email}</p>
                     </div>
                   )}
-                  <p className="text-slate-600 font-mono text-xs mt-1">{selected.qrCode}</p>
+                  <p className="text-slate-600 font-mono text-xs mt-1">{selected.id}</p>
                 </div>
 
                 <div className="flex flex-col gap-2 w-full">
@@ -305,7 +305,7 @@ export default function QRCodesTab() {
           <QRCodeCanvas
             key={s.id}
             id={`qr-bulk-${s.id}`}
-            value={s.qrCode}
+            value={s.id}
             size={300}
             level="H"
             includeMargin={true}

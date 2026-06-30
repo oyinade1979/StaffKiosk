@@ -46,12 +46,19 @@ export default function QRScanner() {
           // Always reload from Supabase to guarantee fresh staff list
           staffCacheRef.current = await fetchStaff();
 
-          // Look up staff by id or qrCode
+          // Look up staff by id or qrCode — trim whitespace from scanned value
           const allStaff = staffCacheRef.current;
-          console.log("[QRScanner] looking in", allStaff.length, "staff records",
-            allStaff.map(s => ({ id: s.id, qrCode: s.qrCode })));
-          const staff = allStaff.find((s) => s.id === decodedText || s.qrCode === decodedText);
-          console.log("[QRScanner] matched staff:", staff?.name ?? "NONE");
+          const trimmed = decodedText.trim();
+          console.log("[QRScanner] looking in", allStaff.length, "staff records");
+          allStaff.forEach(s => console.log("  staff:", { id: s.id, qrCode: s.qrCode, name: s.name }));
+          const staff = allStaff.find(
+            (s) =>
+              s.id === trimmed ||
+              s.qrCode === trimmed ||
+              s.id.trim() === trimmed ||
+              (s.qrCode && s.qrCode.trim() === trimmed)
+          );
+          console.log("[QRScanner] decoded:", JSON.stringify(trimmed), "matched:", staff?.name ?? "NONE");
 
           if (!staff) {
             setResult({ state: "unknown" });

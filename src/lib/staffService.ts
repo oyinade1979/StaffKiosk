@@ -28,12 +28,15 @@ import type { StaffMember } from "@/types";
 
 // Map DB row → StaffMember
 function rowToMember(row: Record<string, unknown>): StaffMember {
+  const id = row.id as string;
+  // If qr_code is null/empty in DB (e.g. old records), fall back to id so scanner still works
+  const qrCode = (row.qr_code as string | null) || id;
   return {
-    id: row.id as string,
+    id,
     name: row.name as string,
     department: row.department as string,
     email: row.email as string,
-    qrCode: row.qr_code as string,
+    qrCode,
     createdAt: row.created_at as string,
     companyId: row.company_id as string,
   };
