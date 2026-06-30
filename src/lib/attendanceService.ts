@@ -230,6 +230,31 @@ export async function cloudCheckIn(
   return record;
 }
 
+/** Re-check-in a staff member who already checked out — resets the existing record */
+export async function cloudReCheckIn(
+  existingRecord: AttendanceRecord,
+  staffId: string,
+  staffName: string,
+  department: string
+): Promise<AttendanceRecord | null> {
+  const today = getLocalToday();
+  const checkInTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const updated: AttendanceRecord = {
+    ...existingRecord,
+    staffId,
+    staffName,
+    department,
+    checkInTime,
+    checkOutTime: undefined,
+    shiftDuration: undefined,
+    date: today,
+  };
+
+  await upsertAttendance(updated);
+  return updated;
+}
+
 /** Check out a staff member — updates existing attendance record */
 export async function cloudCheckOut(
   staffId: string,

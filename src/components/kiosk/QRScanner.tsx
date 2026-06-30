@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { fetchStaff } from "@/lib/staffService";
-import { cloudCheckIn, cloudCheckOut } from "@/lib/attendanceService";
-import { playCheckInSound, playCheckOutSound, playErrorSound, playWarningSound } from "@/lib/audio";
+import { cloudCheckIn, cloudCheckOut, cloudReCheckIn } from "@/lib/attendanceService";
+import { playCheckInSound, playCheckOutSound, playErrorSound } from "@/lib/audio";
 import type { AttendanceRecord, StaffMember } from "@/types";
 
-type ScanState = "idle" | "checkin" | "checkout" | "already_out" | "unknown" | "error";
+type ScanState = "idle" | "checkin" | "recheckin" | "checkout" | "unknown" | "error";
 
 interface CheckInResult {
   state: ScanState;
@@ -111,9 +111,15 @@ export default function QRScanner() {
               playErrorSound();
             }
           } else {
-            // Already checked out
-            setResult({ state: "already_out", record: localRecord });
-            playWarningSound();
+            // Already checked out — allow re-check-in on the same record
+            const record = await cloudReCheckIn(localRecord, staff.id, staff.name, staff.department);
+            if (record) {
+              setResult({ state: "recheckin", record });
+              playCheckInSound();
+            } else {
+              setResult({ state: "unknown" });
+              playErrorSound();
+            }
           }
 
           setTimeout(() => {
@@ -137,15 +143,15 @@ export default function QRScanner() {
       text: "text-white",
       message: `✓ Welcome, ${result.record?.staffName ?? ""}! Checked in at ${result.record?.checkInTime ?? ""}`,
     },
+    recheckin: {
+      bg: "bg-emerald-500/90",
+      text: "text-white",
+      message: `✓ Welcome back, ${result.record?.staffName ?? ""}! Checked in again at ${result.record?.checkInTime ?? ""}`,
+    },
     checkout: {
       bg: "bg-violet-500/90",
       text: "text-white",
       message: `👋 Goodbye, ${result.record?.staffName ?? ""}! Checked out · Shift: ${result.record?.shiftDuration ?? ""}`,
-    },
-    already_out: {
-      bg: "bg-amber-500/90",
-      text: "text-white",
-      message: `Already checked out today — ${result.record?.staffName ?? ""}`,
     },
     unknown: {
       bg: "bg-red-500/90",
