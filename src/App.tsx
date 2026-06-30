@@ -9,12 +9,8 @@ export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [mode, setMode] = useState<AppMode>("kiosk");
 
+  // ALL hooks must be declared before any conditional returns
   const enterApp = useCallback(() => setShowLanding(false), []);
-
-  if (showLanding) {
-    return <LandingPage onEnterApp={enterApp} />;
-  }
-
   const handleOpenPin = useCallback(() => setMode("pin"), []);
   const handlePinSuccess = useCallback(() => setMode("admin"), []);
   const handlePinCancel = useCallback(() => setMode("kiosk"), []);
@@ -22,6 +18,10 @@ export default function App() {
   const handleLockAdmin = useCallback(() => setMode("locked"), []);
   const handleUnlockAdmin = useCallback(() => setMode("admin"), []);
   const handleUnlockCancel = useCallback(() => setMode("kiosk"), []);
+
+  if (showLanding) {
+    return <LandingPage onEnterApp={enterApp} />;
+  }
 
   return (
     <>
