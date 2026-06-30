@@ -1,12 +1,14 @@
 import { useState, useRef } from "react";
 import {
   CheckCircle, AlertCircle, Info, Building2, MessageSquare, Download, Upload, Database,
-  Pencil, Save, X, Bell, BellOff, Timer, PlayCircle, RotateCcw,
+  Pencil, Save, X, Bell, BellOff, Timer, PlayCircle, RotateCcw, CreditCard, ExternalLink, Loader2,
 } from "lucide-react";
 import { getCompanyName, setCompanyName, getWelcomeMessage, setWelcomeMessage, exportAllData, importAllData, getAnnouncement, setAnnouncement, getAnnouncementEnabled, setAnnouncementEnabled, getAnnouncementInterval, setAnnouncementInterval } from "@/lib/storage";
 import { saveSettings } from "@/lib/settingsService";
 import { DEFAULT_WELCOME_MESSAGE } from "@/constants";
 import { cn } from "@/lib/utils";
+import { onspaceClient } from "@/lib/onspaceClient";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 
 export default function SettingsTab() {
   // ── Kiosk customisation ──────────────────────────────────────────────
@@ -82,6 +84,40 @@ export default function SettingsTab() {
     const trimmed = msg.trim();
     if (!trimmed) return;
     window.dispatchEvent(new CustomEvent("kiosk-announcement-preview", { detail: { message: trimmed } }));
+  }
+
+  // ── Manage Subscription ─────────────────────────────────────────────
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState("");
+
+  async function handleManageSubscription() {
+    setPortalLoading(true);
+    setPortalError("");
+
+    const { data: { session } } = await onspaceClient.auth.getSession();
+    const token = session?.access_token;
+
+    const { data, error } = await onspaceClient.functions.invoke("customer-portal", {
+      body: {},
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (error) {
+      let msg = error.message;
+      if (error instanceof FunctionsHttpError) {
+        try { const txt = await error.context?.text(); msg = txt || msg; } catch { /* ignore */ }
+      }
+      setPortalError(msg || "Unable to open billing portal. Please try again.");
+      setPortalLoading(false);
+      return;
+    }
+
+    if (data?.url) {
+      window.location.href = data.url;
+    } else {
+      setPortalError("No portal URL returned. Please try again.");
+      setPortalLoading(false);
+    }
   }
 
   // ── Backup / Restore ─────────────────────────────────────────────────
@@ -346,6 +382,54 @@ export default function SettingsTab() {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ══ Subscription ════════════════════════════════════════════════ */}
+      <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl overflow-hidden">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-700/60">
+          <div className="w-9 h-9 rounded-xl bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
+            <CreditCard size={16} className="text-violet-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-white font-semibold text-sm">Subscription</p>
+            <p className="text-slate-500 text-xs">Manage your plan, payment method, and invoices via the Stripe portal</p>
+          </div>
+        </div>
+
+        <div className="px-5 py-5 flex flex-col gap-4">
+          <div className="flex items-start gap-3 bg-violet-500/10 border border-violet-500/20 rounded-xl p-3">
+            <Info size={13} className="text-violet-400 flex-shrink-0 mt-0.5" />
+            <p className="text-violet-200 text-xs leading-relaxed">
+              You'll be redirected to the Stripe billing portal where you can update your payment method, download invoices, switch plans, or cancel your subscription.
+            </p>
+          </div>
+
+          {portalError && (
+            <div className="flex items-start gap-2 text-xs rounded-xl px-3 py-2.5 border bg-red-500/10 border-red-500/20 text-red-300">
+              <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
+              {portalError}
+            </div>
+          )}
+
+          <button
+            onClick={handleManageSubscription}
+            disabled={portalLoading}
+            className={cn(
+              "flex items-center gap-2 border text-sm font-semibold px-5 py-3 rounded-xl transition w-fit",
+              portalLoading
+                ? "bg-slate-700/60 border-slate-600/60 text-slate-500 cursor-not-allowed"
+                : "bg-violet-500/15 hover:bg-violet-500/25 border-violet-500/30 hover:border-violet-500/50 text-violet-300 hover:text-violet-200"
+            )}
+          >
+            {portalLoading ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <CreditCard size={15} />
+            )}
+            {portalLoading ? "Opening portal…" : "Manage Subscription"}
+            {!portalLoading && <ExternalLink size={12} className="opacity-60" />}
+          </button>
         </div>
       </div>
 
