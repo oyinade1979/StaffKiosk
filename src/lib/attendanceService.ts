@@ -1,100 +1,23 @@
 /**
  * Supabase attendance service — syncs check-in/check-out records.
  *
- * Matches the existing Supabase attendance table schema:
+ * Works with the ORIGINAL Supabase attendance table schema (no migration needed):
  *   id            uuid  primary key
- *   company_id    uuid
+ *   company_id    uuid  (unused — we pass null)
  *   staff_id      uuid
  *   check_in      timestamptz
  *   check_out     timestamptz (nullable)
  *   created_at    timestamptz
- *   staff_name    text  (add via SQL below if missing)
- *   department    text  (add via SQL below if missing)
- *   date          text  (add via SQL below if missing)
- *   shift_duration text (add via SQL below if missing)
  *
- * Run once in Supabase SQL Editor to add missing columns:
- * ─────────────────────────────────────────────────────────
- * ALTER TABLE public.attendance
- *   ADD COLUMN IF NOT EXISTS staff_name text,
- *   ADD COLUMN IF NOT EXISTS department text,
- *   ADD COLUMN IF NOT EXISTS date text,
- *   ADD COLUMN IF NOT EXISTS shift_duration text;
- * ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
- * DO $$ BEGIN
- *   IF NOT EXISTS (
- *     SELECT 1 FROM pg_policies WHERE tablename='attendance' AND policyname='Allow all'
- *   ) THEN
- *     CREATE POLICY "Allow all" ON public.attendance FOR ALL USING (true) WITH CHECK (true);
- *   END IF;
- * END $$;
- * ─────────────────────────────────────────────────────────
+ * Staff name / department are resolved by joining against the local staff cache.
  */
 
 import { supabase } from "@/lib/supabase";
+import { fetchStaff } from "@/lib/staffService";
 import type { AttendanceRecord } from "@/types";
 
 const TABLE = "attendance";
 const LOCAL_KEY = "kiosk_attendance";
-
-// ── Row → AttendanceRecord ───────────────────────────────────────────
-function rowToRecord(row: Record<string, unknown>): AttendanceRecord {
-  // check_in and check_out are ISO timestamp strings from Supabase
-  const checkInISO = row.check_in as string | null;
-  const checkOutISO = row.check_out as string | null;
-
-  // Derive display time (HH:MM AM/PM) from ISO timestamp
-  const toTimeStr = (iso: string | null) => {
-    if (!iso) return undefined;
-    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
-
-  // Derive date string (YYYY-MM-DD) from check_in timestamp
-  const toDateStr = (iso: string | null) => {
-    if (!iso) return new Date().toISOString().slice(0, 10);
-    return new Date(iso).toLocaleDateString("en-CA"); // YYYY-MM-DD
-  };
-
-  const checkInTime = (row.check_in_time as string | null) ?? toTimeStr(checkInISO) ?? "";
-  const checkOutTime = (row.check_out_time as string | null) ?? toTimeStr(checkOutISO ?? null) ?? undefined;
-  const date = (row.date as string | null) ?? toDateStr(checkInISO);
-
-  return {
-    id: row.id as string,
-    staffId: row.staff_id as string,
-    staffName: (row.staff_name as string | null) ?? "Unknown",
-    department: (row.department as string | null) ?? "",
-    checkInTime,
-    checkOutTime,
-    shiftDuration: (row.shift_duration as string | null) ?? undefined,
-    date,
-  };
-}
-
-// ── AttendanceRecord → DB row ────────────────────────────────────────
-function recordToRow(r: AttendanceRecord) {
-  // Convert HH:MM AM/PM back to ISO timestamp using the record date
-  const toISO = (timeStr: string | undefined, dateStr: string): string | null => {
-    if (!timeStr) return null;
-    // Combine date + time string into a Date and get ISO
-    const dt = new Date(`${dateStr} ${timeStr}`);
-    return isNaN(dt.getTime()) ? null : dt.toISOString();
-  };
-
-  return {
-    id: r.id,
-    staff_id: r.staffId,
-    staff_name: r.staffName,
-    department: r.department,
-    date: r.date,
-    check_in: toISO(r.checkInTime, r.date),
-    check_out: r.checkOutTime ? toISO(r.checkOutTime, r.date) : null,
-    shift_duration: r.shiftDuration ?? null,
-    // Store display strings too for easy retrieval
-    check_in_time: r.checkInTime,
-    check_out_time: r.checkOutTime ?? null,
-  };
-}
 
 // ── Local cache helpers ──────────────────────────────────────────────
 function getLocal(): AttendanceRecord[] {
@@ -109,10 +32,76 @@ function saveLocal(records: AttendanceRecord[]): void {
   localStorage.setItem(LOCAL_KEY, JSON.stringify(records));
 }
 
+// ── Row → AttendanceRecord ───────────────────────────────────────────
+// Resolves staff name/department from the provided staff lookup map.
+function rowToRecord(
+  row: Record<string, unknown>,
+  staffMap: Map<string, { name: string; department: string }>
+): AttendanceRecord {
+  const checkInISO = row.check_in as string | null;
+  const checkOutISO = row.check_out as string | null;
+
+  const toTimeStr = (iso: string | null): string | undefined => {
+    if (!iso) return undefined;
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  // Use local date (not UTC) to match the date used in check-in
+  const toDateStr = (iso: string | null): string => {
+    if (!iso) return new Date().toLocaleDateString("en-CA");
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  const staffId = row.staff_id as string;
+  const staffInfo = staffMap.get(staffId);
+  const checkInTime = toTimeStr(checkInISO) ?? "";
+  const checkOutTime = toTimeStr(checkOutISO ?? null);
+  const date = toDateStr(checkInISO);
+
+  // Compute shift duration if both times exist
+  let shiftDuration: string | undefined;
+  if (checkInTime && checkOutTime) {
+    shiftDuration = formatDuration(checkInTime, checkOutTime);
+  }
+
+  return {
+    id: row.id as string,
+    staffId,
+    staffName: staffInfo?.name ?? (row.staff_name as string | null) ?? "Unknown",
+    department: staffInfo?.department ?? (row.department as string | null) ?? "",
+    checkInTime,
+    checkOutTime,
+    shiftDuration,
+    date,
+  };
+}
+
+// ── AttendanceRecord → DB row (only original columns) ───────────────
+function recordToRow(r: AttendanceRecord) {
+  const toISO = (timeStr: string | undefined, dateStr: string): string | null => {
+    if (!timeStr) return null;
+    const dt = new Date(`${dateStr} ${timeStr}`);
+    return isNaN(dt.getTime()) ? null : dt.toISOString();
+  };
+
+  return {
+    id: r.id,
+    staff_id: r.staffId,
+    check_in: toISO(r.checkInTime, r.date),
+    check_out: r.checkOutTime ? toISO(r.checkOutTime, r.date) : null,
+    // company_id: null  — omit to avoid uuid type issues
+  };
+}
+
 // ── Public API ───────────────────────────────────────────────────────
 
 /** Fetch all attendance records from Supabase, sync to localStorage */
 export async function fetchAttendance(): Promise<AttendanceRecord[]> {
+  // Load staff for name/department resolution
+  const staffList = await fetchStaff();
+  const staffMap = new Map(staffList.map((s) => [s.id, { name: s.name, department: s.department }]));
+
   const { data, error } = await supabase
     .from(TABLE)
     .select("*")
@@ -123,20 +112,23 @@ export async function fetchAttendance(): Promise<AttendanceRecord[]> {
     return getLocal();
   }
 
-  const records = (data ?? []).map(rowToRecord);
+  const records = (data ?? []).map((row) => rowToRecord(row as Record<string, unknown>, staffMap));
   saveLocal(records);
   return records;
 }
 
-/** Upsert (insert or update) a single attendance record */
-export async function upsertAttendance(record: AttendanceRecord): Promise<void> {
+/** Upsert (insert or update) a single attendance record to Supabase + localStorage */
+async function upsertAttendance(record: AttendanceRecord): Promise<void> {
   const row = recordToRow(record);
   console.log("[attendanceService] upsert row:", row);
   const { error } = await supabase.from(TABLE).upsert(row);
   if (error) {
     console.warn("[attendanceService] Supabase upsert error:", error.message);
+  } else {
+    console.log("[attendanceService] upsert OK for", record.staffName);
   }
-  // Always sync to localStorage
+
+  // Always update localStorage regardless of Supabase outcome
   const local = getLocal();
   const idx = local.findIndex((r) => r.id === record.id);
   if (idx === -1) {
@@ -147,20 +139,29 @@ export async function upsertAttendance(record: AttendanceRecord): Promise<void> 
   }
 }
 
+/** Get today's date string in local time (YYYY-MM-DD) */
+function getLocalToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** Check in a staff member — creates attendance record */
 export async function cloudCheckIn(
   staffId: string,
   staffName: string,
   department: string
 ): Promise<AttendanceRecord | null> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalToday();
+  const todayStart = new Date(today + "T00:00:00").toISOString();
+  const todayEnd = new Date(today + "T23:59:59").toISOString();
 
-  // Check if already checked in today (Supabase)
+  // Check if already checked in today via Supabase
   const { data: existing, error: fetchErr } = await supabase
     .from(TABLE)
     .select("*")
     .eq("staff_id", staffId)
-    .eq("date", today)
+    .gte("check_in", todayStart)
+    .lte("check_in", todayEnd)
     .maybeSingle();
 
   if (fetchErr) {
@@ -168,7 +169,9 @@ export async function cloudCheckIn(
   }
 
   if (existing) {
-    return rowToRecord(existing as Record<string, unknown>);
+    console.log("[attendanceService] already checked in today");
+    const staffMap = new Map([[staffId, { name: staffName, department }]]);
+    return rowToRecord(existing as Record<string, unknown>, staffMap);
   }
 
   const now = new Date();
@@ -191,14 +194,17 @@ export async function cloudCheckIn(
 export async function cloudCheckOut(
   staffId: string
 ): Promise<{ record: AttendanceRecord; alreadyOut: boolean } | null> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalToday();
+  const todayStart = new Date(today + "T00:00:00").toISOString();
+  const todayEnd = new Date(today + "T23:59:59").toISOString();
 
-  // Find today's check-in record
+  // Find today's check-in from Supabase
   const { data: existing, error } = await supabase
     .from(TABLE)
     .select("*")
     .eq("staff_id", staffId)
-    .eq("date", today)
+    .gte("check_in", todayStart)
+    .lte("check_in", todayEnd)
     .maybeSingle();
 
   if (error || !existing) {
@@ -210,7 +216,8 @@ export async function cloudCheckOut(
     return null;
   }
 
-  const rec = rowToRecord(existing as Record<string, unknown>);
+  const staffMap = new Map([[staffId, { name: "", department: "" }]]);
+  const rec = rowToRecord(existing as Record<string, unknown>, staffMap);
 
   if (rec.checkOutTime) {
     return { record: rec, alreadyOut: true };
