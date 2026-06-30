@@ -132,11 +132,20 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<void>
   // Persist to localStorage immediately for instant UI feedback
   applyToLocal(merged);
 
-  // Sync to Supabase
-  const { error } = await supabase.from(TABLE).upsert(settingsToRow(merged));
-  if (error) {
-    console.warn("[settingsService] Supabase upsert error:", error.message);
+  // Sync settings row to Supabase
+  const { error: settingsErr } = await supabase.from(TABLE).upsert(settingsToRow(merged));
+  if (settingsErr) {
+    console.warn("[settingsService] Supabase settings upsert error:", settingsErr.message);
   } else {
     console.log("[settingsService] settings saved to cloud");
+  }
+
+  // Also sync company name to the companies table
+  const { error: companyErr } = await supabase.from("companies").upsert({
+    id: "00000000-0000-0000-0000-000000000001",
+    company_name: merged.companyName,
+  });
+  if (companyErr) {
+    console.warn("[settingsService] Supabase companies upsert error:", companyErr.message);
   }
 }

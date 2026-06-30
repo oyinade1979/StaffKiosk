@@ -80,7 +80,7 @@ function rowToRecord(
 // Stable company UUID — used to satisfy the NOT NULL company_id column
 const COMPANY_UUID = "00000000-0000-0000-0000-000000000001";
 
-// ── AttendanceRecord → DB row (only original columns) ───────────────
+// ── AttendanceRecord → DB row (all columns including extras) ────────
 function recordToRow(r: AttendanceRecord) {
   const toISO = (timeStr: string | undefined, dateStr: string): string | null => {
     if (!timeStr) return null;
@@ -95,6 +95,11 @@ function recordToRow(r: AttendanceRecord) {
     staff_id: r.staffId,
     check_in: toISO(r.checkInTime, r.date),
     check_out: r.checkOutTime ? toISO(r.checkOutTime, r.date) : null,
+    // Extra columns that exist in the actual Supabase schema
+    staff_name: r.staffName,
+    department: r.department,
+    date: r.date,
+    shift_duration: r.shiftDuration ?? null,
   };
 }
 

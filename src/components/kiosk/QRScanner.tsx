@@ -5,7 +5,7 @@ import { cloudCheckIn, cloudCheckOut, cloudReCheckIn } from "@/lib/attendanceSer
 import { playCheckInSound, playCheckOutSound, playErrorSound } from "@/lib/audio";
 import type { AttendanceRecord, StaffMember } from "@/types";
 
-type ScanState = "idle" | "checkin" | "recheckin" | "checkout" | "unknown" | "error";
+type ScanState = "idle" | "checkin" | "recheckin" | "checkout" | "unknown" | "error" | "already_out";
 
 interface CheckInResult {
   state: ScanState;
@@ -100,8 +100,15 @@ export default function QRScanner() {
             const outcome = await cloudCheckOut(staff.id, trimmed);
             if (outcome) {
               if (outcome.alreadyOut) {
-                setResult({ state: "already_out", record: outcome.record });
-                playWarningSound();
+                // Already out — treat as re-check-in
+                const reRecord = await cloudReCheckIn(outcome.record, staff.id, staff.name, staff.department);
+                if (reRecord) {
+                  setResult({ state: "recheckin", record: reRecord });
+                  playCheckInSound();
+                } else {
+                  setResult({ state: "unknown" });
+                  playErrorSound();
+                }
               } else {
                 setResult({ state: "checkout", record: outcome.record });
                 playCheckOutSound();
@@ -152,6 +159,11 @@ export default function QRScanner() {
       bg: "bg-violet-500/90",
       text: "text-white",
       message: `👋 Goodbye, ${result.record?.staffName ?? ""}! Checked out · Shift: ${result.record?.shiftDuration ?? ""}`,
+    },
+    already_out: {
+      bg: "bg-emerald-500/90",
+      text: "text-white",
+      message: `✓ Welcome back, ${result.record?.staffName ?? ""}! Checked in again at ${result.record?.checkInTime ?? ""}`,
     },
     unknown: {
       bg: "bg-red-500/90",
