@@ -17,12 +17,22 @@ function LoginModal({ onClose, onEnterApp }: LoginModalProps) {
     setLoading(true);
     await new Promise((r) => setTimeout(r, 1000));
     setLoading(false);
-    // In production this would authenticate via Supabase Auth
-    if (form.email && form.password.length >= 8) {
-      onEnterApp();
-    } else {
-      setError("Invalid email or password. Please try again.");
+    // Check if email is registered
+    const registered: string[] = JSON.parse(localStorage.getItem("ag_registered_emails") || "[]");
+    if (!registered.includes(form.email.toLowerCase())) {
+      setError("No account found with this email. Please sign up first.");
+      return;
     }
+    if (form.password.length < 8) {
+      setError("Invalid email or password. Please try again.");
+      return;
+    }
+    const user = JSON.parse(localStorage.getItem("ag_current_user") || "{}");
+    if (user.email?.toLowerCase() !== form.email.toLowerCase()) {
+      setError("Invalid email or password. Please try again.");
+      return;
+    }
+    onEnterApp();
   };
 
   return (
@@ -134,12 +144,23 @@ function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
   const [form, setForm] = useState({ company: "", email: "", password: "" });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate async call
+    // Check if email is already registered
+    const registered: string[] = JSON.parse(localStorage.getItem("ag_registered_emails") || "[]");
+    if (registered.includes(form.email.toLowerCase())) {
+      setLoading(false);
+      setError("An account with this email already exists. Please log in instead.");
+      return;
+    }
     await new Promise((r) => setTimeout(r, 1200));
+    // Save email to prevent duplicate signups
+    registered.push(form.email.toLowerCase());
+    localStorage.setItem("ag_registered_emails", JSON.stringify(registered));
+    localStorage.setItem("ag_current_user", JSON.stringify({ email: form.email, company: form.company, plan }));
     setLoading(false);
     setSubmitted(true);
   };
@@ -200,6 +221,12 @@ function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
                 </button>
               ))}
             </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 mb-2">
+                {error}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div>
@@ -293,7 +320,6 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
             <button onClick={() => scrollTo("how-it-works")} className="hover:text-slate-900 transition-colors">How it works</button>
             <button onClick={() => scrollTo("pricing")} className="hover:text-slate-900 transition-colors">Pricing</button>
             <button onClick={() => setShowLogin(true)} className="hover:text-slate-900 transition-colors">Log In</button>
-            <button onClick={onEnterApp} className="hover:text-slate-900 transition-colors">Open Kiosk</button>
           </nav>
           <button
             onClick={() => setShowModal(true)}
