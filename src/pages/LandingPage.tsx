@@ -1,6 +1,116 @@
 import { useState } from "react";
 import dashboardPreview from "@/assets/dashboard-preview.jpg";
 
+interface LoginModalProps {
+  onClose: () => void;
+  onEnterApp: () => void;
+}
+
+function LoginModal({ onClose, onEnterApp }: LoginModalProps) {
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    await new Promise((r) => setTimeout(r, 1000));
+    setLoading(false);
+    // In production this would authenticate via Supabase Auth
+    if (form.email && form.password.length >= 8) {
+      onEnterApp();
+    } else {
+      setError("Invalid email or password. Please try again.");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 transition-colors text-2xl leading-none"
+          aria-label="Close"
+        >
+          ×
+        </button>
+
+        <div className="flex items-center gap-2 mb-6">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 leading-tight">Welcome back</h2>
+            <p className="text-slate-500 text-xs">Sign in to your AccessGrid account</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="login-email">
+              Work email
+            </label>
+            <input
+              id="login-email"
+              type="email"
+              required
+              placeholder="you@company.com"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 text-slate-900 placeholder:text-slate-400"
+            />
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-slate-700" htmlFor="login-password">
+                Password
+              </label>
+              <button type="button" className="text-xs text-cyan-600 hover:underline">Forgot password?</button>
+            </div>
+            <input
+              id="login-password"
+              type="password"
+              required
+              placeholder="Your password"
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 text-slate-900 placeholder:text-slate-400"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl transition-colors text-sm mt-1"
+          >
+            {loading ? "Signing in…" : "Sign in →"}
+          </button>
+        </form>
+
+        <p className="text-center text-sm text-slate-500 mt-5">
+          No account?{" "}
+          <button
+            type="button"
+            className="text-cyan-600 font-semibold hover:underline"
+            onClick={() => { onClose(); }}
+          >
+            Start free trial
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 interface PlanType {
   id: "monthly" | "yearly";
   label: string;
@@ -159,6 +269,7 @@ function CreateAccountModal({ onClose, onEnterApp }: CreateAccountModalProps) {
 
 export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) {
   const [showModal, setShowModal] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -181,6 +292,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
           <nav className="hidden md:flex items-center gap-8 text-sm text-slate-600">
             <button onClick={() => scrollTo("how-it-works")} className="hover:text-slate-900 transition-colors">How it works</button>
             <button onClick={() => scrollTo("pricing")} className="hover:text-slate-900 transition-colors">Pricing</button>
+            <button onClick={() => setShowLogin(true)} className="hover:text-slate-900 transition-colors">Log In</button>
             <button onClick={onEnterApp} className="hover:text-slate-900 transition-colors">Open Kiosk</button>
           </nav>
           <button
@@ -494,6 +606,7 @@ export default function LandingPage({ onEnterApp }: { onEnterApp: () => void }) 
       </footer>
 
       {showModal && <CreateAccountModal onClose={() => setShowModal(false)} onEnterApp={onEnterApp} />}
+      {showLogin && <LoginModal onClose={() => setShowLogin(false)} onEnterApp={onEnterApp} />}
     </div>
   );
 }

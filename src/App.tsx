@@ -3,21 +3,16 @@ import KioskMode from "@/components/kiosk/KioskMode";
 import PinPad from "@/components/admin/PinPad";
 import AdminMode from "@/components/admin/AdminMode";
 import LandingPage from "@/pages/LandingPage";
-import { saveSettings } from "@/lib/settingsService";
 import type { AppMode } from "@/types";
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [mode, setMode] = useState<AppMode>("kiosk");
 
-  // On first load, push current local settings to Supabase so all tables get seeded
-  // Must be declared before any conditional returns (Rules of Hooks)
-  useEffect(() => {
-    saveSettings({}).catch((e) => console.warn("[App] initial settings sync failed:", e));
-  }, []);
+  const enterApp = useCallback(() => setShowLanding(false), []);
 
   if (showLanding) {
-    return <LandingPage onEnterApp={() => setShowLanding(false)} />;
+    return <LandingPage onEnterApp={enterApp} />;
   }
 
   const handleOpenPin = useCallback(() => setMode("pin"), []);
