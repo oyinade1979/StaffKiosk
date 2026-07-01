@@ -317,27 +317,28 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Step 1 — Sign up & send OTP
+  // Step 1 — Send OTP via signInWithOtp (shouldCreateUser: true creates the account)
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    const { error: signupError } = await onspaceClient.auth.signUp({
+    const { error: otpError } = await onspaceClient.auth.signInWithOtp({
       email: form.email.trim().toLowerCase(),
-      password: form.password,
       options: {
+        shouldCreateUser: true,
         data: { username: form.company, company_name: form.company },
       },
     });
 
     setLoading(false);
 
-    if (signupError) {
-      if (signupError.message.toLowerCase().includes("already registered")) {
-        setError("An account with this email already exists. Please log in instead.");
+    if (otpError) {
+      if (otpError.message.toLowerCase().includes("already registered") ||
+          otpError.message.toLowerCase().includes("email rate limit")) {
+        setError("Too many attempts. Please wait a minute and try again.");
       } else {
-        setError(signupError.message);
+        setError(otpError.message);
       }
       return;
     }
@@ -345,7 +346,7 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
     setStep("verifyOtp");
   };
 
-  // Step 2 — Verify OTP, then enter the app directly (no card required)
+  // Step 2 — Verify OTP (type: "email"), then set password + metadata, then enter app
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -354,12 +355,24 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
     const { data: otpData, error: otpError } = await onspaceClient.auth.verifyOtp({
       email: form.email.trim().toLowerCase(),
       token: otp.trim(),
-      type: "signup",
+      type: "email",
     });
 
     if (otpError) {
       setLoading(false);
       setError("Invalid or expired code. Please check your email and try again.");
+      return;
+    }
+
+    // Set password and metadata now that user is verified
+    const { error: updateError } = await onspaceClient.auth.updateUser({
+      password: form.password,
+      data: { username: form.company, company_name: form.company },
+    });
+
+    if (updateError) {
+      setLoading(false);
+      setError("Account verified but couldn't set password: " + updateError.message);
       return;
     }
 
@@ -441,7 +454,10 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
                 type="button"
                 className="text-cyan-600 hover:underline font-medium"
                 onClick={() => {
-                  onspaceClient.auth.resend({ type: "signup", email: form.email.trim().toLowerCase() });
+                  onspaceClient.auth.signInWithOtp({
+                    email: form.email.trim().toLowerCase(),
+                    options: { shouldCreateUser: false },
+                  });
                 }}
               >
                 Resend code
