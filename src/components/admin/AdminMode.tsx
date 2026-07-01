@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { LogOut, Users, ClipboardList, QrCode, Settings, LayoutDashboard } from "lucide-react";
+import { useState, useEffect } from "react";
+import { LogOut, Users, ClipboardList, QrCode, Settings, LayoutDashboard, Clock } from "lucide-react";
+import { onspaceClient } from "@/lib/onspaceClient";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import DashboardTab from "./DashboardTab";
 import AttendanceTab from "./AttendanceTab";
 import StaffTab from "./StaffTab";
@@ -23,10 +25,52 @@ const TABS: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
   { id: "qrcodes", label: "QR Codes", icon: <QrCode size={17} /> },
 ];
 
+interface SubStatus {
+  trialing: boolean;
+  daysLeft: number | null;
+  plan: string | null;
+}
+
 export default function AdminMode({ onExit, onLock }: AdminModeProps) {
   const [view, setView] = useState<ActiveView>("dashboard");
+  const [subStatus, setSubStatus] = useState<SubStatus | null>(null);
 
   useInactivityTimer(true, onLock);
+
+  // Fetch subscription status once on mount to show trial badge
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { session } } = await onspaceClient.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+
+        const { data, error } = await onspaceClient.functions.invoke("check-subscription", {
+          body: {},
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (error) {
+          if (error instanceof FunctionsHttpError) {
+            try { await error.context?.text(); } catch { /* ignore */ }
+          }
+          return;
+        }
+
+        if (data?.trialing) {
+          const endDate = data.trial_end ? new Date(data.trial_end) : null;
+          const daysLeft = endDate
+            ? Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+            : null;
+          setSubStatus({ trialing: true, daysLeft, plan: "trial" });
+        } else if (data?.subscribed) {
+          setSubStatus({ trialing: false, daysLeft: null, plan: data.plan ?? null });
+        }
+      } catch {
+        // Non-critical — silently ignore
+      }
+    })();
+  }, []);
 
   const isSettings = view === "settings";
 
@@ -48,6 +92,27 @@ export default function AdminMode({ onExit, onLock }: AdminModeProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Trial / plan badge */}
+          {subStatus?.trialing && (
+            <div className="hidden sm:flex items-center gap-1.5 bg-amber-500/15 border border-amber-500/30 rounded-xl px-3 py-1.5">
+              <Clock size={12} className="text-amber-400 flex-shrink-0" />
+              <span className="text-amber-300 text-xs font-semibold whitespace-nowrap">
+                Trial
+                {subStatus.daysLeft !== null && (
+                  <> · {subStatus.daysLeft} day{subStatus.daysLeft !== 1 ? "s" : ""} left</>
+                )}
+              </span>
+            </div>
+          )}
+          {subStatus && !subStatus.trialing && subStatus.plan && (
+            <div className="hidden sm:flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/30 rounded-xl px-3 py-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+              <span className="text-emerald-300 text-xs font-semibold capitalize whitespace-nowrap">
+                {subStatus.plan} · Active
+              </span>
+            </div>
+          )}
+
           {/* Settings gear button */}
           <button
             onClick={() => setView(isSettings ? "dashboard" : "settings")}
