@@ -34,6 +34,26 @@ async function invokeFn(fnName: string, body: object): Promise<{ url?: string; e
   return data as { url?: string };
 }
 
+// ─── Insert trial account record ─────────────────────────────────────
+async function upsertTrialAccount(userId: string, email: string, companyName: string) {
+  const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    await onspaceClient.from("accounts").upsert(
+      {
+        id: userId,
+        email,
+        company_name: companyName || email.split("@")[0],
+        plan: "trial",
+        subscription_status: "trialing",
+        trial_ends_at: trialEndsAt,
+      },
+      { onConflict: "email" }
+    );
+  } catch (e) {
+    console.warn("Could not upsert trial account:", e);
+  }
+}
+
 // ─── Privacy Policy Modal ─────────────────────────────────────────────
 function PrivacyModal({ onClose }: { onClose: () => void }) {
   return (
@@ -45,44 +65,36 @@ function PrivacyModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="overflow-y-auto px-7 py-6 text-sm text-slate-600 leading-relaxed space-y-5">
           <p className="text-slate-400 text-xs">Last updated: {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">1. Information We Collect</h3>
             <p>When you create an AccessGrid account, we collect your company name, work email address, and a password. We also collect staff names, departments, and email addresses that you add to the system for QR badge generation. Attendance records (check-in and check-out times) are stored and linked to staff members.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">2. How We Use Your Information</h3>
             <p>Your information is used solely to provide the AccessGrid attendance tracking service. We use your email to send account verification codes and important service updates. Staff data is used only to generate QR codes and record attendance. We do not sell, share, or rent your data to third parties.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">3. Data Storage & Security</h3>
             <p>Your account credentials are secured using industry-standard encryption via our authentication provider. Attendance and staff data is stored in a secure cloud database. Local device data (cached for offline use) is stored in your browser's localStorage and is not transmitted to third parties.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">4. Payment Information</h3>
             <p>Payments are processed securely by Stripe. AccessGrid does not store or handle your card details directly. Stripe's privacy policy applies to all payment transactions. You can manage or cancel your subscription at any time through the Stripe customer portal accessible in your admin settings.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">5. Cookies</h3>
             <p>AccessGrid uses essential session cookies to keep you signed in. We do not use tracking, advertising, or analytics cookies. No third-party cookies are set on our platform.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">6. Data Retention</h3>
             <p>Your data is retained for as long as your account is active. If you cancel your subscription, your data remains accessible for 30 days, after which it may be permanently deleted. You can request deletion of your account and all associated data at any time by contacting us.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">7. Your Rights</h3>
             <p>You have the right to access, correct, or delete the personal data we hold about you. To exercise these rights or ask any privacy-related questions, please contact us at{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="text-cyan-600 hover:underline">{CONTACT_EMAIL}</a>.
             </p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">8. Changes to This Policy</h3>
             <p>We may update this Privacy Policy from time to time. We will notify registered users of significant changes by email. Continued use of AccessGrid after changes constitutes acceptance of the updated policy.</p>
@@ -107,27 +119,22 @@ function TermsModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="overflow-y-auto px-7 py-6 text-sm text-slate-600 leading-relaxed space-y-5">
           <p className="text-slate-400 text-xs">Last updated: {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">1. Acceptance of Terms</h3>
             <p>By creating an account and using AccessGrid, you agree to be bound by these Terms of Service. If you do not agree, please do not use the service. These terms apply to all users, including company administrators and their staff members.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">2. Service Description</h3>
             <p>AccessGrid is a web-based staff attendance tracking system that allows companies to manage employee check-in and check-out using QR codes. The service includes a kiosk interface, admin dashboard, staff management, attendance reporting, and data export capabilities.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">3. Account Responsibilities</h3>
             <p>You are responsible for maintaining the confidentiality of your account credentials. You must not share your login details or allow unauthorised access to your admin account. You agree to use AccessGrid only for lawful purposes and in accordance with applicable employment and data protection laws in your jurisdiction.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">4. Subscription & Billing</h3>
-            <p>AccessGrid is offered on a subscription basis — monthly (£25/month) or yearly (£240/year) per company. A 14-day free trial is included with each new account, after which payment is required to continue. Subscriptions automatically renew unless cancelled before the renewal date. You can cancel anytime via the Stripe customer portal in your admin settings.</p>
+            <p>AccessGrid is offered on a subscription basis — monthly (£25/month) or yearly (£240/year) per company. A 14-day free trial is included with each new account, with no credit card required to start. After the trial, a subscription is required to continue. Subscriptions automatically renew unless cancelled before the renewal date. You can cancel anytime via the Stripe customer portal in your admin settings.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">5. Refunds</h3>
             <p>Refunds are considered on a case-by-case basis within 7 days of a charge if the service was not usable due to a fault on our end. To request a refund, contact us at{" "}
@@ -135,22 +142,18 @@ function TermsModal({ onClose }: { onClose: () => void }) {
               Trial periods are non-refundable once converted to a paid plan.
             </p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">6. Staff Data & GDPR</h3>
             <p>As a company administrator, you act as the data controller for your staff members' personal information entered into AccessGrid. You are responsible for ensuring you have appropriate lawful basis (e.g. legitimate interest or employment contract) to collect and process attendance data, and for informing your staff accordingly.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">7. Service Availability</h3>
             <p>We aim to keep AccessGrid available at all times but do not guarantee uninterrupted access. We are not liable for any downtime, data loss, or disruption caused by factors outside our reasonable control, including third-party service outages (e.g. Stripe, Supabase).</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">8. Termination</h3>
             <p>We reserve the right to suspend or terminate accounts that violate these terms, engage in abuse, or remain unpaid. Upon termination, access to your data will cease after a 30-day grace period, after which it may be permanently deleted.</p>
           </div>
-
           <div>
             <h3 className="font-bold text-slate-800 mb-1.5">9. Contact</h3>
             <p>For questions, complaints, or suggestions, please reach out at{" "}
@@ -296,7 +299,7 @@ const PLANS: PlanType[] = [
 ];
 
 // ─── Create Account Modal ─────────────────────────────────────────────
-type Step = "form" | "verifyOtp" | "redirecting";
+type Step = "form" | "verifyOtp";
 
 interface CreateAccountModalProps {
   onClose: () => void;
@@ -314,27 +317,28 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Step 1 — Sign up & send OTP
+  // Step 1 — Send OTP via signInWithOtp (shouldCreateUser: true creates the account)
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    const { error: signupError } = await onspaceClient.auth.signUp({
+    const { error: otpError } = await onspaceClient.auth.signInWithOtp({
       email: form.email.trim().toLowerCase(),
-      password: form.password,
       options: {
+        shouldCreateUser: true,
         data: { username: form.company, company_name: form.company },
       },
     });
 
     setLoading(false);
 
-    if (signupError) {
-      if (signupError.message.toLowerCase().includes("already registered")) {
-        setError("An account with this email already exists. Please log in instead.");
+    if (otpError) {
+      if (otpError.message.toLowerCase().includes("already registered") ||
+          otpError.message.toLowerCase().includes("email rate limit")) {
+        setError("Too many attempts. Please wait a minute and try again.");
       } else {
-        setError(signupError.message);
+        setError(otpError.message);
       }
       return;
     }
@@ -342,16 +346,16 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
     setStep("verifyOtp");
   };
 
-  // Step 2 — Verify OTP, then redirect to Stripe Checkout
+  // Step 2 — Verify OTP (type: "email"), then set password + metadata, then enter app
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    const { error: otpError } = await onspaceClient.auth.verifyOtp({
+    const { data: otpData, error: otpError } = await onspaceClient.auth.verifyOtp({
       email: form.email.trim().toLowerCase(),
       token: otp.trim(),
-      type: "signup",
+      type: "email",
     });
 
     if (otpError) {
@@ -360,31 +364,36 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
       return;
     }
 
-    // OTP verified — now create Stripe checkout session
-    setStep("redirecting");
-    const priceId = PRICE_IDS[plan];
-    const result = await invokeFn("create-checkout", { priceId, companyName: form.company });
+    // Set password and metadata now that user is verified
+    const { error: updateError } = await onspaceClient.auth.updateUser({
+      password: form.password,
+      data: { username: form.company, company_name: form.company },
+    });
 
-    if (result.error || !result.url) {
-      setLoading(false);
-      setStep("verifyOtp");
-      setError(`Payment setup failed: ${result.error || "No checkout URL returned"}`);
-      return;
+    if (updateError) {
+      // "New password should be different from the old password" means the user
+      // already exists and is already authenticated — just continue to the app.
+      const alreadyExists =
+        updateError.message.toLowerCase().includes("different from the old") ||
+        updateError.message.toLowerCase().includes("same password") ||
+        updateError.message.toLowerCase().includes("should be different");
+      if (!alreadyExists) {
+        setLoading(false);
+        setError("Account verified but couldn't set password: " + updateError.message);
+        return;
+      }
+      // Otherwise fall through — user is already authenticated
     }
 
-    // Redirect to Stripe Checkout (opens in same tab)
-    window.location.href = result.url;
+    // OTP verified — save trial account record then enter the app
+    const userId = otpData?.user?.id;
+    if (userId) {
+      await upsertTrialAccount(userId, form.email.trim().toLowerCase(), form.company);
+    }
+
+    // Enter the app — no payment required upfront
+    onEnterApp();
   };
-
-  // Handle returning from Stripe (checkout=success in URL)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("checkout") === "success") {
-      // Clean URL
-      window.history.replaceState({}, "", window.location.pathname);
-      onEnterApp();
-    }
-  }, [onEnterApp]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
@@ -397,22 +406,20 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
           ×
         </button>
 
-        {/* ── Step: redirecting ── */}
-        {step === "redirecting" && (
-          <div className="text-center py-10">
-            <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-slate-700 font-medium">Redirecting to secure payment…</p>
-            <p className="text-slate-400 text-sm mt-1">You'll be taken to Stripe to enter your card details.</p>
-          </div>
-        )}
-
         {/* ── Step: verify OTP ── */}
         {step === "verifyOtp" && (
           <>
-            <div className="mb-6">
+            <div className="mb-5">
               <h2 className="text-2xl font-bold text-slate-900 mb-1">Check your email</h2>
               <p className="text-slate-500 text-sm">
-                We sent a {4}-digit code to <strong>{form.email}</strong>. Enter it below to confirm your account.
+                We sent a 4-digit code to <strong>{form.email}</strong>. Enter it below to confirm your account.
+              </p>
+            </div>
+
+            {/* Spam folder warning */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
+              <p className="text-amber-700 text-xs font-medium">
+                ⚠️ Can't find the email? Check your <strong>spam or junk folder</strong>. Some providers (Yahoo, Outlook) may filter verification emails.
               </p>
             </div>
 
@@ -446,17 +453,20 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
                 disabled={loading || otp.length < 4}
                 className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl transition-colors text-sm"
               >
-                {loading ? "Verifying…" : "Confirm & Set Up Payment →"}
+                {loading ? "Verifying…" : "Confirm & Start Free Trial →"}
               </button>
             </form>
 
             <p className="text-center text-xs text-slate-400 mt-4">
-              Didn't receive it?{" "}
+              Still not received?{" "}
               <button
                 type="button"
-                className="text-cyan-600 hover:underline"
+                className="text-cyan-600 hover:underline font-medium"
                 onClick={() => {
-                  onspaceClient.auth.resend({ type: "signup", email: form.email.trim().toLowerCase() });
+                  onspaceClient.auth.signInWithOtp({
+                    email: form.email.trim().toLowerCase(),
+                    options: { shouldCreateUser: false },
+                  });
                 }}
               >
                 Resend code
@@ -469,10 +479,10 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
         {step === "form" && (
           <>
             <h2 className="text-2xl font-bold text-slate-900 mb-1">Create your account</h2>
-            <p className="text-slate-500 text-sm mb-6">14-day free trial · Cancel anytime</p>
+            <p className="text-slate-500 text-sm mb-6">14-day free trial · No credit card required · Cancel anytime</p>
 
-            {/* Plan picker */}
-            <div className="flex gap-3 mb-6">
+            {/* Plan picker — shown so user selects before trial; payment collected after trial */}
+            <div className="flex gap-3 mb-5">
               {PLANS.map((p) => (
                 <button
                   key={p.id}
@@ -494,6 +504,11 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
                   <div className="text-xs text-slate-500 mt-0.5">{p.sub}</div>
                 </button>
               ))}
+            </div>
+
+            {/* Trial notice */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-4 text-xs text-emerald-700">
+              ✓ <strong>Free for 14 days</strong> — no card needed now. You'll be prompted to subscribe after your trial ends.
             </div>
 
             {error && (
@@ -527,7 +542,7 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
                   required
                   placeholder="you@company.com"
                   value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, company: form.company, email: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 text-slate-900 placeholder:text-slate-400"
                 />
               </div>
@@ -552,7 +567,7 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
                 disabled={loading}
                 className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl transition-colors text-sm mt-1"
               >
-                {loading ? "Creating account…" : "Create account →"}
+                {loading ? "Creating account…" : "Start Free Trial →"}
               </button>
             </form>
 
@@ -569,6 +584,65 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
   );
 }
 
+// ─── Paywall shown when trial ends (used from App.tsx via SubscriptionPaywall) ──
+export function SubscriptionPaywallPage({ onGoHome }: { onGoHome: () => void }) {
+  const [loading, setLoading] = useState<"monthly" | "yearly" | null>(null);
+
+  const handleSubscribe = async (plan: "monthly" | "yearly") => {
+    setLoading(plan);
+    const result = await invokeFn("create-checkout", { priceId: PRICE_IDS[plan] });
+    if (result.error || !result.url) { setLoading(null); return; }
+    window.location.href = result.url;
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+      <div className="max-w-lg w-full text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center mx-auto mb-6">
+          <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+        </div>
+        <h1 className="text-3xl font-bold text-white mb-3">Your trial has ended</h1>
+        <p className="text-slate-400 text-base leading-relaxed mb-8">
+          Subscribe to continue using AccessGrid — full access to the admin panel, attendance tracking, and all features. Cards from all countries accepted.
+        </p>
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 text-left">
+            <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Monthly</div>
+            <div className="text-2xl font-bold text-white mb-0.5">£25<span className="text-slate-500 text-sm font-normal">/mo</span></div>
+            <div className="text-slate-500 text-xs mb-4">Per company</div>
+            <button
+              onClick={() => handleSubscribe("monthly")}
+              disabled={loading !== null}
+              className="w-full border border-cyan-500/50 hover:border-cyan-500 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50"
+            >
+              {loading === "monthly" ? "Redirecting…" : "Subscribe"}
+            </button>
+          </div>
+          <div className="bg-slate-900 border-2 border-cyan-500/60 rounded-2xl p-5 text-left relative">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-cyan-500 text-white text-xs font-bold px-3 py-0.5 rounded-full whitespace-nowrap">SAVE £60</div>
+            <div className="text-cyan-400 text-xs font-semibold uppercase tracking-wider mb-2">Yearly</div>
+            <div className="text-2xl font-bold text-white mb-0.5">£240<span className="text-slate-500 text-sm font-normal">/yr</span></div>
+            <div className="text-slate-500 text-xs mb-4">Per company · £20/mo</div>
+            <button
+              onClick={() => handleSubscribe("yearly")}
+              disabled={loading !== null}
+              className="w-full bg-cyan-500 hover:bg-cyan-400 text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50"
+            >
+              {loading === "yearly" ? "Redirecting…" : "Subscribe"}
+            </button>
+          </div>
+        </div>
+        <p className="text-slate-600 text-xs mb-4">Powered by Stripe · All major cards accepted worldwide</p>
+        <button onClick={onGoHome} className="text-slate-500 hover:text-slate-300 text-sm transition">
+          ← Back to home
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Landing Page ─────────────────────────────────────────────────────
 export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp: () => void; skipAutoLogin?: boolean }) {
   const [showModal, setShowModal] = useState(false);
@@ -578,7 +652,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
   const [initialPlan, setInitialPlan] = useState<"monthly" | "yearly">("monthly");
   const [loggedInUser, setLoggedInUser] = useState<{ email: string; name: string } | null>(null);
 
-  // Check if returning from Stripe checkout
+  // Check if returning from Stripe checkout (post-trial payment)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("checkout") === "success") {
@@ -635,7 +709,6 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
             <button onClick={() => scrollTo("how-it-works")} className="hover:text-slate-900 transition-colors">How it works</button>
             <button onClick={() => scrollTo("pricing")} className="hover:text-slate-900 transition-colors">Pricing</button>
             {loggedInUser ? (
-              /* ── Logged-in user info ── */
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
@@ -646,10 +719,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
                     <div className="text-xs text-slate-400 max-w-[140px] truncate">{loggedInUser.email}</div>
                   </div>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="text-xs text-slate-400 hover:text-red-500 transition-colors font-medium"
-                >
+                <button onClick={handleLogout} className="text-xs text-slate-400 hover:text-red-500 transition-colors font-medium">
                   Sign out
                 </button>
               </div>
@@ -658,17 +728,11 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
             )}
           </nav>
           {loggedInUser ? (
-            <button
-              onClick={onEnterApp}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
-            >
+            <button onClick={onEnterApp} className="bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
               Open Kiosk →
             </button>
           ) : (
-            <button
-              onClick={() => openSignup("monthly")}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
-            >
+            <button onClick={() => openSignup("monthly")} className="bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
               Start Free Trial
             </button>
           )}
@@ -685,7 +749,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
         <div className="relative max-w-6xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-4 py-1.5 mb-8">
             <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-            <span className="text-cyan-400 text-sm font-medium">Live attendance tracking — 14-day free trial</span>
+            <span className="text-cyan-400 text-sm font-medium">Live attendance tracking — 14-day free trial, no card needed</span>
           </div>
 
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-[1.05] tracking-tight mb-6 max-w-4xl mx-auto">
@@ -715,7 +779,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
             </button>
           </div>
 
-          <p className="text-slate-600 text-sm mt-5">No credit card required during trial · Setup in under 5 minutes</p>
+          <p className="text-slate-600 text-sm mt-5">No credit card required · Free for 14 days · Setup in under 5 minutes</p>
         </div>
 
         {/* Dashboard screenshot */}
@@ -832,7 +896,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
         <div className="max-w-4xl mx-auto px-6">
           <div className="text-center mb-14">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">Simple, honest pricing</h2>
-            <p className="text-slate-500 text-lg">One plan. Everything included. 14-day free trial.</p>
+            <p className="text-slate-500 text-lg">14-day free trial — no card required. Subscribe after to keep going.</p>
           </div>
 
           <div className="flex flex-col md:flex-row gap-6 justify-center items-stretch">
@@ -845,7 +909,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
               </div>
               <div className="text-slate-500 text-sm mb-6">Per company · up to 20 staff</div>
               <ul className="space-y-3 mb-8 text-sm text-slate-600">
-                {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "14-day free trial"].map((f) => (
+                {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "14-day free trial, no card needed"].map((f) => (
                   <li key={f} className="flex items-start gap-2">
                     <span className="text-emerald-500 mt-0.5 flex-shrink-0">✓</span>
                     {f}
@@ -872,7 +936,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
               </div>
               <div className="text-slate-500 text-sm mb-6">Per company · only £20/month · save £60</div>
               <ul className="space-y-3 mb-8 text-sm text-slate-600">
-                {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "14-day free trial"].map((f) => (
+                {["Unlimited check-ins & check-outs", "Real-time dashboard", "CSV exports", "QR badge generation", "Cloud sync across kiosks", "14-day free trial, no card needed"].map((f) => (
                   <li key={f} className="flex items-start gap-2">
                     <span className="text-emerald-500 mt-0.5 flex-shrink-0">✓</span>
                     {f}
@@ -891,6 +955,8 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
           <p className="text-center text-slate-400 text-sm mt-8">
             Need more than 20 staff?{" "}
             <a href={`mailto:${CONTACT_EMAIL}`} className="text-cyan-600 hover:underline">Get in touch</a>
+            <br />
+            <span className="text-slate-500 text-xs mt-1 block">All major cards accepted worldwide · Powered by Stripe</span>
           </p>
         </div>
       </section>
@@ -903,7 +969,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
               Ready to ditch the clipboard?
             </h2>
             <p className="text-slate-400 text-lg mb-10">
-              Join teams who've already switched to QR-based attendance. 14-day free trial. No card needed upfront.
+              Join teams who've already switched to QR-based attendance. 14-day free trial — no credit card needed to start.
             </p>
             <button
               onClick={() => openSignup("monthly")}
@@ -911,7 +977,7 @@ export default function LandingPage({ onEnterApp, skipAutoLogin }: { onEnterApp:
             >
               Create Your Account →
             </button>
-            <p className="text-slate-600 text-sm mt-5">Setup takes under 5 minutes</p>
+            <p className="text-slate-600 text-sm mt-5">No card required · Setup takes under 5 minutes</p>
           </div>
         </div>
       </section>
