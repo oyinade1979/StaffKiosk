@@ -53,13 +53,16 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://accessgrid.app";
 
+    // No trial here — trial is managed in our own accounts table
+    // Accept all international cards (no payment_method_types restriction)
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
+      // Allow all supported payment methods globally
+      billing_address_collection: "auto",
       subscription_data: {
-        trial_period_days: 14,
         metadata: {
           company_name: companyName || "",
           user_id: user.id,
