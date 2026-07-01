@@ -371,9 +371,18 @@ function CreateAccountModal({ onClose, onEnterApp, onShowPrivacy, onShowTerms, i
     });
 
     if (updateError) {
-      setLoading(false);
-      setError("Account verified but couldn't set password: " + updateError.message);
-      return;
+      // "New password should be different from the old password" means the user
+      // already exists and is already authenticated — just continue to the app.
+      const alreadyExists =
+        updateError.message.toLowerCase().includes("different from the old") ||
+        updateError.message.toLowerCase().includes("same password") ||
+        updateError.message.toLowerCase().includes("should be different");
+      if (!alreadyExists) {
+        setLoading(false);
+        setError("Account verified but couldn't set password: " + updateError.message);
+        return;
+      }
+      // Otherwise fall through — user is already authenticated
     }
 
     // OTP verified — save trial account record then enter the app
